@@ -1,0 +1,11 @@
+## Interface: 120000, 120001
+## Title: Dungeon Teleports Tab
+## Notes: Dungeon Teleports Tab for Retail
+## Author: Mentiuszen
+## Version: 1.0
+## OptionalDeps: mQoL
+## SavedVariables: DungeonTeleportsTab_DB
+
+mQoL_VersionDetection.lua
+mQoL_Styles.lua
+DungeonTeleportsTab.lua
