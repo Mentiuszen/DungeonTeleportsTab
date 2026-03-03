@@ -1,5 +1,5 @@
 if _G.mQoL_Styles and _G.mQoL_Styles.CreateCustomScrollbar and _G.mQoL_Styles.CreateCustomDropdown then
-    return -- Styles are already provided by another loaded addon (for example mQoL itself).
+    return -- if styles loaded already from mQoL dont load again
 end
 
 local addonName = ...
