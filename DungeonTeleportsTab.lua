@@ -446,7 +446,6 @@ end
 
 -- Teleport Data Structure
 local TeleportCategories = {
-    { text = "TWW Season 3", value = "TWW_S3" },
     { text = "Midnight Season 1", value = "MID_S1" },
     --{ text = "Midnight Season 2", value = "MID_S2" },
     { separator = true },
@@ -463,15 +462,9 @@ local TeleportCategories = {
 }
 
 local TeleportData = {
-    ["TWW_S3"] = {  -- The War Within Season 3 - Ended code will disable tab automatically.
-        obtainable = "ends",
-        ends = 20260121,
-        postEnds = 20260303,
-        ids = { 2660, 2662, 2649, 2773, 2830, 2287, 2441, 2810, },
-    },
     ["MID_S1"] = {
         obtainable = "starts",
-        starts = 20260318,
+        starts = 20260325,
         --ends = 20260723, most likely July 2026 (date is speculative)
         --postEnds = 20260806, most likely August 2026 (date is speculative)
         ids = { 658, 1209, 1753, 2526, 2805, 2811, 2874, 2915, },
