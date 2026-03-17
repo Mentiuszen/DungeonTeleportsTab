@@ -96,7 +96,12 @@ end
 
 local function ConfigureTeleportButtonClicks(btn)
     if not btn or not btn.RegisterForClicks then
-        return
+        return false
+    end
+
+    -- SecureActionButton click registration is protected in combat.
+    if InCombatLockdown and InCombatLockdown() then
+        return false
     end
 
     if ShouldUseActionButtonKeyDown() then
@@ -104,6 +109,7 @@ local function ConfigureTeleportButtonClicks(btn)
     else
         btn:RegisterForClicks("LeftButtonUp")
     end
+    return true
 end
 
 local function SetTeleportButtonSpellAction(btn, spellID)
@@ -1026,6 +1032,13 @@ local function InitDungeonTeleportsTabClassic()
     contentFrame.scrollChild = scrollChild
     contentFrame.buttons = {}
     contentFrame.cooldownRefreshPending = false
+
+    local classicCombatBlocker = CreateFrame("Frame", nil, inset)
+    classicCombatBlocker:SetAllPoints(scrollFrame)
+    classicCombatBlocker:EnableMouse(true)
+    classicCombatBlocker:SetFrameStrata(scrollFrame:GetFrameStrata())
+    classicCombatBlocker:SetFrameLevel(scrollFrame:GetFrameLevel() + 20)
+    classicCombatBlocker:Hide()
     
     -- Custom Scrollbar (from mQoL Addon Styles)
     if mQoL_Styles and mQoL_Styles.CreateCustomScrollbar then
@@ -1374,6 +1387,11 @@ local function InitDungeonTeleportsTabClassic()
                 end
             end
         elseif event == "PLAYER_REGEN_ENABLED" then
+            for _, btn in pairs(contentFrame.buttons) do
+                if btn and btn:IsShown() then
+                    ConfigureTeleportButtonClicks(btn)
+                end
+            end
             if pendingCategoryValue then
                 RequestCategoryUpdate(pendingCategoryValue, pendingCategoryText)
             else
@@ -1506,13 +1524,38 @@ local function InitDungeonTeleportsTabClassic()
 
         if isSuspended then
             contentFrame:SetAlpha(0)
-            RestoreBuiltInPVEChrome()
-            if PanelTemplates_DeselectTab then
-                PanelTemplates_DeselectTab(tab)
+            title:SetAlpha(0)
+            scrollChild:SetAlpha(0)
+            classicCombatBlocker:Hide()
+            if scrollFrame.scrollbar then
+                scrollFrame.scrollbar:SetAlpha(0)
+                if scrollFrame.scrollbar.EnableMouse then
+                    scrollFrame.scrollbar:EnableMouse(false)
+                end
             end
-            SelectClassicFallbackTabVisual()
+            if dropdown then
+                dropdown:SetAlpha(0)
+                if dropdown.EnableMouse then
+                    dropdown:EnableMouse(false)
+                end
+            end
         else
             contentFrame:SetAlpha(1)
+            title:SetAlpha(1)
+            scrollChild:SetAlpha(1)
+            classicCombatBlocker:Hide()
+            if scrollFrame.scrollbar then
+                scrollFrame.scrollbar:SetAlpha(1)
+                if scrollFrame.scrollbar.EnableMouse then
+                    scrollFrame.scrollbar:EnableMouse(true)
+                end
+            end
+            if dropdown then
+                dropdown:SetAlpha(1)
+                if dropdown.EnableMouse then
+                    dropdown:EnableMouse(true)
+                end
+            end
         end
     end
 
@@ -1573,13 +1616,11 @@ local function InitDungeonTeleportsTabClassic()
         SetClassicDungeonTeleportsCombatSuspended(false)
         contentFrame:Show()
         RequestCategoryUpdate(selectedCategoryValue, selectedCategoryText)
-        if usesNativePVEPanelTabState then
-            PVEFrame:SetTitle("Dungeon Teleports")
-            if PVEFrame.SetPortraitToAsset then
-                PVEFrame:SetPortraitToAsset("Interface\\Icons\\Spell_Arcane_TeleportDalaran")
-            elseif PortraitFrame_SetPortraitToAsset then
-                PortraitFrame_SetPortraitToAsset(PVEFrame, "Interface\\Icons\\Spell_Arcane_TeleportDalaran")
-            end
+        PVEFrame:SetTitle("Dungeon Teleports")
+        if PVEFrame.SetPortraitToAsset then
+            PVEFrame:SetPortraitToAsset("Interface\\Icons\\Spell_Arcane_TeleportDalaran")
+        elseif PortraitFrame_SetPortraitToAsset then
+            PortraitFrame_SetPortraitToAsset(PVEFrame, "Interface\\Icons\\Spell_Arcane_TeleportDalaran")
         end
         if UpdateDungeonTeleportsTabTextColor then
             UpdateDungeonTeleportsTabTextColor()
@@ -1626,6 +1667,9 @@ local function InitDungeonTeleportsTabClassic()
             if not usesNativePVEPanelTabState and contentFrame and contentFrame:IsShown() then
                 pendingHideAfterCombat = true
                 SetClassicDungeonTeleportsCombatSuspended(true)
+                if PVEFrame and PVEFrame:IsShown() and not IsClassicFallbackFrameShown() then
+                    SwitchToFallbackTab()
+                end
             end
             if usesNativePVEPanelTabState and PVEFrame and PVEFrame:IsShown() and contentFrame and contentFrame:IsShown() then
                 pendingHideAfterCombat = true
@@ -1636,8 +1680,10 @@ local function InitDungeonTeleportsTabClassic()
             else
                 tab:Disable()
             end
-            if not contentFrame:IsShown() and PanelTemplates_DeselectTab then
-                PanelTemplates_DeselectTab(tab)
+            if (not usesNativePVEPanelTabState and isClassicCombatSuspended) or not contentFrame:IsShown() then
+                if PanelTemplates_DeselectTab then
+                    PanelTemplates_DeselectTab(tab)
+                end
             end
         else
             SetClassicDungeonTeleportsCombatSuspended(false)
@@ -2283,6 +2329,11 @@ local function InitDungeonTeleportsTabRetail()
                 end
             end
         elseif event == "PLAYER_REGEN_ENABLED" then
+            for _, btn in pairs(contentFrame.buttons) do
+                if btn and btn:IsShown() then
+                    ConfigureTeleportButtonClicks(btn)
+                end
+            end
             if pendingCategoryValue then
                 RequestCategoryUpdate(pendingCategoryValue, pendingCategoryText)
             else
