@@ -10,7 +10,7 @@ mQoL_VersionDetection = mQoL_VersionDetection or {}
 local version, build, date, tocversion = GetBuildInfo()
 tocversion = tonumber(tocversion) or 0
 
-local clientInfo = {
+clientInfo = {
     version = version,
     tocversion = tocversion,
     isRetail = false,

@@ -1,6 +1,6 @@
-## Interface: 120000, 120001
+## Interface: 50502, 50503
 ## Title: Dungeon Teleports Tab
-## Notes: Dungeon Teleports Tab for Retail
+## Notes: Dungeon Teleports Tab for Mists of Pandaria Classic
 ## Author: Mentiuszen
 ## Version: 1.5
 ## OptionalDeps: mQoL
