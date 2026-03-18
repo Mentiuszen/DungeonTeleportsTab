@@ -1522,39 +1522,48 @@ local function InitDungeonTeleportsTabClassic()
 
         isClassicCombatSuspended = isSuspended and true or false
 
+        local targetAlpha = isSuspended and 0 or 1
+        contentFrame:SetAlpha(1)
+
+        if title then
+            title:SetAlpha(targetAlpha)
+        end
+        if inset then
+            inset:SetAlpha(targetAlpha)
+        end
+        if scrollFrame then
+            scrollFrame:SetAlpha(targetAlpha)
+        end
+        if scrollChild then
+            scrollChild:SetAlpha(targetAlpha)
+        end
+        if scrollFrame and scrollFrame.scrollbar then
+            scrollFrame.scrollbar:SetAlpha(targetAlpha)
+            if scrollFrame.scrollbar.EnableMouse then
+                scrollFrame.scrollbar:EnableMouse(not isSuspended)
+            end
+        end
+        if dropdown then
+            dropdown:SetAlpha(targetAlpha)
+            if dropdown.EnableMouse then
+                dropdown:EnableMouse(not isSuspended)
+            end
+        end
+        if classicCombatBlocker then
+            if isSuspended then
+                classicCombatBlocker:Show()
+            else
+                classicCombatBlocker:Hide()
+            end
+        end
+
         if isSuspended then
-            contentFrame:SetAlpha(0)
-            title:SetAlpha(0)
-            scrollChild:SetAlpha(0)
-            classicCombatBlocker:Hide()
-            if scrollFrame.scrollbar then
-                scrollFrame.scrollbar:SetAlpha(0)
-                if scrollFrame.scrollbar.EnableMouse then
-                    scrollFrame.scrollbar:EnableMouse(false)
-                end
-            end
-            if dropdown then
-                dropdown:SetAlpha(0)
-                if dropdown.EnableMouse then
-                    dropdown:EnableMouse(false)
-                end
-            end
-        else
-            contentFrame:SetAlpha(1)
-            title:SetAlpha(1)
-            scrollChild:SetAlpha(1)
-            classicCombatBlocker:Hide()
-            if scrollFrame.scrollbar then
-                scrollFrame.scrollbar:SetAlpha(1)
-                if scrollFrame.scrollbar.EnableMouse then
-                    scrollFrame.scrollbar:EnableMouse(true)
-                end
-            end
-            if dropdown then
-                dropdown:SetAlpha(1)
-                if dropdown.EnableMouse then
-                    dropdown:EnableMouse(true)
-                end
+            RestoreBuiltInPVEChrome()
+        elseif contentFrame:IsShown() then
+            if PVEFrame_HideLeftInset then
+                PVEFrame_HideLeftInset()
+            elseif PVEFrameLeftInset then
+                PVEFrameLeftInset:Hide()
             end
         end
     end
@@ -1566,10 +1575,10 @@ local function InitDungeonTeleportsTabClassic()
         end
 
         pendingHideAfterCombat = false
-        SetClassicDungeonTeleportsCombatSuspended(false)
         if contentFrame then
             contentFrame:Hide()
         end
+        SetClassicDungeonTeleportsCombatSuspended(false)
         RestoreBuiltInPVEChrome()
         if PanelTemplates_DeselectTab then
             PanelTemplates_DeselectTab(tab)
@@ -1587,6 +1596,9 @@ local function InitDungeonTeleportsTabClassic()
 
         isInternalTabSwitch = true
         SwitchToFallbackPVEFrame()
+        if not usesNativePVEPanelTabState then
+            SelectClassicFallbackTabVisual()
+        end
         isInternalTabSwitch = false
     end
 
@@ -1613,6 +1625,7 @@ local function InitDungeonTeleportsTabClassic()
         end
 
         RefreshCategoryOptions()
+        pendingHideAfterCombat = false
         SetClassicDungeonTeleportsCombatSuspended(false)
         contentFrame:Show()
         RequestCategoryUpdate(selectedCategoryValue, selectedCategoryText)
@@ -1664,12 +1677,12 @@ local function InitDungeonTeleportsTabClassic()
     local function UpdateDungeonTeleportsTabState()
         local inCombat = IsInCombat()
         if inCombat then
-            if not usesNativePVEPanelTabState and contentFrame and contentFrame:IsShown() then
+            if not usesNativePVEPanelTabState and PVEFrame and PVEFrame:IsShown() and contentFrame and contentFrame:IsShown() then
                 pendingHideAfterCombat = true
-                SetClassicDungeonTeleportsCombatSuspended(true)
-                if PVEFrame and PVEFrame:IsShown() and not IsClassicFallbackFrameShown() then
+                if not IsClassicFallbackFrameShown() then
                     SwitchToFallbackTab()
                 end
+                SetClassicDungeonTeleportsCombatSuspended(true)
             end
             if usesNativePVEPanelTabState and PVEFrame and PVEFrame:IsShown() and contentFrame and contentFrame:IsShown() then
                 pendingHideAfterCombat = true
@@ -1686,12 +1699,24 @@ local function InitDungeonTeleportsTabClassic()
                 end
             end
         else
-            SetClassicDungeonTeleportsCombatSuspended(false)
             local selectedTabID = usesNativePVEPanelTabState and PanelTemplates_GetSelectedTab and PanelTemplates_GetSelectedTab(PVEFrame) or nil
+            local didHideAfterCombat = false
+
+            if not usesNativePVEPanelTabState and pendingHideAfterCombat and contentFrame and contentFrame:IsShown() then
+                if HideDungeonTeleportsFrame() then
+                    didHideAfterCombat = true
+                    if PVEFrame and PVEFrame:IsShown() then
+                        SwitchToFallbackTab()
+                    end
+                end
+            end
+
+            SetClassicDungeonTeleportsCombatSuspended(false)
+
             if usesNativePVEPanelTabState and contentFrame and contentFrame:IsShown() and selectedTabID ~= 4 then
                 HideDungeonTeleportsFrame()
             end
-            if not usesNativePVEPanelTabState and contentFrame and contentFrame:IsShown() then
+            if not didHideAfterCombat and not usesNativePVEPanelTabState and contentFrame and contentFrame:IsShown() then
                 if GroupFinderFrame and GroupFinderFrame:IsShown() then
                     HideDungeonTeleportsFrame()
                 elseif PVPUIFrame and PVPUIFrame:IsShown() then
@@ -1700,11 +1725,6 @@ local function InitDungeonTeleportsTabClassic()
                     HideDungeonTeleportsFrame()
                 elseif ChallengesFrame and ChallengesFrame:IsShown() then
                     HideDungeonTeleportsFrame()
-                end
-            end
-            if not usesNativePVEPanelTabState and pendingHideAfterCombat and contentFrame and contentFrame:IsShown() then
-                if HideDungeonTeleportsFrame() then
-                    SwitchToFallbackTab()
                 end
             end
             if usesNativePVEPanelTabState and pendingHideAfterCombat and PVEFrame and PVEFrame:IsShown() and contentFrame and contentFrame:IsShown() then
