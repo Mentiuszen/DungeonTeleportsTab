@@ -1,4 +1,8 @@
-if mQoL then return end -- Prevent loading if mQoL addon is installed
+local Utils = DungeonTeleportsTab_Utils
+
+if mQoL or (Utils and Utils.IsAddOnActive("mQoL")) then
+    return -- Prevent loading if mQoL addon is already active
+end
 
 local addonName = ...
 
@@ -39,4 +43,3 @@ else
 end
 
 mQoL_VersionDetection.clientInfo = clientInfo
-

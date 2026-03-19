@@ -1,22 +1,14 @@
 -- Check for mQoL version 1.2.0 and greater before loading to prevent conflicts, as this module is now built into mQoL 1.2.0
-local function IsVersionAtLeast(current, required)
-    local c1, c2, c3 = tostring(current or ""):match("(%d+)%.?(%d*)%.?(%d*)")
-    local r1, r2, r3 = tostring(required or ""):match("(%d+)%.?(%d*)%.?(%d*)")
-    c1, c2, c3 = tonumber(c1) or 0, tonumber(c2) or 0, tonumber(c3) or 0
-    r1, r2, r3 = tonumber(r1) or 0, tonumber(r2) or 0, tonumber(r3) or 0
-    if c1 ~= r1 then return c1 > r1 end
-    if c2 ~= r2 then return c2 > r2 end
-    return c3 >= r3
-end
-
-local detectedMQoLVersion =
+local Utils = DungeonTeleportsTab_Utils
+local isMQoLActive = (_G.mQoL ~= nil) or Utils.IsAddOnActive("mQoL")
+local detectedMQoLVersion = isMQoLActive and (
     (_G.mQoL and mQoL.version)
-    or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("mQoL", "Version"))
-    or (_G.GetAddOnMetadata and _G.GetAddOnMetadata("mQoL", "Version"))
+    or Utils.GetAddOnVersion("mQoL")
+) or nil
 
-if detectedMQoLVersion and IsVersionAtLeast(detectedMQoLVersion, "1.2.0") then
+if isMQoLActive and detectedMQoLVersion and Utils.IsVersionAtLeast(detectedMQoLVersion, "1.2.0") then
     C_Timer.After(3, function()
-        print("|cffFF6B6BDungeon Teleports Tab|r: Detected mQoL addon v" .. tostring(detectedMQoLVersion) .. " with this module built-in. DungeonTeleportsTab addon will not load to avoid conflicts. Dungeon Teleports Tab are already available in mQoL.")
+        print("|cffFF6B6BDungeon Teleports Tab|r: Detected active mQoL addon v" .. tostring(detectedMQoLVersion) .. " with this module built-in. DungeonTeleportsTab addon will not load to avoid conflicts. Dungeon Teleports Tab are already available in mQoL.")
     end)
     return
 end
@@ -1816,13 +1808,7 @@ local frame = CreateFrame("Frame")
 local isInitialized = false
 
 local function IsGroupFinderLoaded()
-    if C_AddOns and C_AddOns.IsAddOnLoaded then
-        return C_AddOns.IsAddOnLoaded("Blizzard_GroupFinder")
-    end
-    if IsAddOnLoaded then
-        return IsAddOnLoaded("Blizzard_GroupFinder")
-    end
-    return false
+    return Utils.IsAddOnLoaded("Blizzard_GroupFinder")
 end
 
 local function TryInitialize(self)

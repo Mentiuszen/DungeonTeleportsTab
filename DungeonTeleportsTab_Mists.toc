@@ -6,6 +6,7 @@
 ## OptionalDeps: mQoL
 ## SavedVariables: DungeonTeleportsTab_DB
 
+DungeonTeleportsTab_Utils.lua
 mQoL_VersionDetection.lua
 mQoL_Styles.lua
 DungeonTeleportsTab.lua
