@@ -808,8 +808,8 @@ local function GetDungeonTeleportsTabConfig()
         tabTemplate = isClassicLayout and (_G.PVEFrameTabTemplate and "PVEFrameTabTemplate" or "CharacterFrameTabButtonTemplate") or "PanelTabButtonTemplate",
         tabID = isClassicLayout and 0 or 4,
         tabOffsetX = isClassicLayout and -16 or 6,
-        selectedCategoryValue = isClassicLayout and "Mists of Pandaria" or "TWW_S3",
-        selectedCategoryText = isClassicLayout and "Mists of Pandaria" or "TWW Season 3",
+        selectedCategoryValue = isClassicLayout and "Mists of Pandaria" or "MID_S1",
+        selectedCategoryText = isClassicLayout and "Mists of Pandaria" or "Midnight Season 1",
     }
 end
 
@@ -1111,7 +1111,7 @@ local function InitDungeonTeleportsTab()
             if self.teleportSource then
                 GameTooltip:AddLine(self.teleportSource, 1, 1, 1, true)
             else
-                GameTooltip:AddLine("Complete this dungeon on Mythic Keystone Level 10+ within the time limit.", 1, 1, 1, true)
+                GameTooltip:AddLine("Complete Mythic Keystone on Level 10 or higher within the time limit.", 1, 1, 1, true)
             end
         end
 
