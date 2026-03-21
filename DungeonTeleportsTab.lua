@@ -1808,7 +1808,15 @@ local frame = CreateFrame("Frame")
 local isInitialized = false
 
 local function IsGroupFinderLoaded()
-    return Utils.IsAddOnLoaded("Blizzard_GroupFinder")
+    if C_AddOns and C_AddOns.IsAddOnLoaded then
+        return C_AddOns.IsAddOnLoaded("Blizzard_GroupFinder")
+    end
+
+    if _G.IsAddOnLoaded then
+        return _G.IsAddOnLoaded("Blizzard_GroupFinder")
+    end
+
+    return false
 end
 
 local function TryInitialize(self)
