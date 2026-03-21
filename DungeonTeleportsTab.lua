@@ -1666,12 +1666,17 @@ local function InitDungeonTeleportsTab()
         end
 
         local selectedTabID = usesNativePVEPanelTabState and PanelTemplates_GetSelectedTab and PanelTemplates_GetSelectedTab(PVEFrame) or nil
+        local isNativeTabActive = usesNativePVEPanelTabState
+            and (
+                selectedTabID == tab:GetID()
+                or (contentFrame and contentFrame:IsShown())
+            )
         local isClassicTabActive = not usesNativePVEPanelTabState
             and contentFrame
             and contentFrame:IsShown()
             and not isClassicCombatSuspended
             and not IsClassicFallbackFrameShown()
-        local isActive = (usesNativePVEPanelTabState and selectedTabID == tab:GetID()) or isClassicTabActive
+        local isActive = isNativeTabActive or isClassicTabActive
         local isHovered = tab:IsMouseOver()
 
         if isActive or isHovered then
