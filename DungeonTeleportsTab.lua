@@ -511,6 +511,7 @@ local TeleportData = {
         { id = 2515, name = "The Azure Vault", texture = 4742932, spellID = 393279, location = "Azure Span", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
         { id = 2516, name = "The Nokhud Offensive", texture = 4742934, spellID = 393262, location = "Ohn'ahran Plains", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
         { id = 2451, name = "Uldaman: Legacy of Tyr", texture = 4742940, spellID = 393222, location = "Badlands", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2579, name = "Dawn of the Infinite", texture = 5222376, spellID = 424197, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
         { id = 2522, name = "Vault of the Incarnates", texture = 4742941, spellID = 432254, location = "Thaldraszus", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
         { id = 2569, name = "Aberrus, the Shadowed Crucible", texture = 5149417, spellID = 432257, location = "Zaralek Cavern", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
         { id = 2549, name = "Amirdrassil, the Dream's Hope", texture = 5409262, spellID = 432258, location = "Emerald Dream", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
