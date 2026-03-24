@@ -2,7 +2,7 @@
 ## Title: Dungeon Teleports Tab
 ## Notes: Dungeon Teleports Tab for Retail
 ## Author: Mentiuszen
-## Version: 1.5
+## Version: 1.6
 ## OptionalDeps: mQoL
 ## SavedVariables: DungeonTeleportsTab_DB
 
