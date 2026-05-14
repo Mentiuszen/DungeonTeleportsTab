@@ -1,9 +1,3 @@
-local Utils = DungeonTeleportsTab_Utils
-
-if mQoL or (Utils and Utils.IsAddOnActive("mQoL")) then
-    return -- Prevent loading if mQoL addon is already active
-end
-
 local addonName = ...
 
 -- This entire module will be rewritten to use the new version detection system in next update
@@ -14,7 +8,7 @@ mQoL_VersionDetection = mQoL_VersionDetection or {}
 local version, build, date, tocversion = GetBuildInfo()
 tocversion = tonumber(tocversion) or 0
 
-clientInfo = {
+local clientInfo = {
     version = version,
     tocversion = tocversion,
     isRetail = false,
@@ -23,12 +17,14 @@ clientInfo = {
     isPandaria = false,
     isEra = false,
     isBCC = false,
+    isClassicToT = false,
 }
 
 if tocversion >= 120000 then
     clientInfo.isRetail = true
 elseif tocversion >= 50500 and tocversion <= 50505 then
     clientInfo.isClassic = true
+    clientInfo.isClassicToT = tocversion <= 50503
 elseif tocversion >= 70000 and tocversion <= 70300 then
     clientInfo.isLegion = true
 elseif tocversion >= 11300 and tocversion <= 11599 then

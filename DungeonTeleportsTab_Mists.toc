@@ -1,12 +1,13 @@
-## Interface: 50502, 50503
+## Interface: 50503, 50504
 ## Title: Dungeon Teleports Tab
 ## Notes: Dungeon Teleports Tab for Mists of Pandaria Classic
 ## Author: Mentiuszen
-## Version: 1.6.1
+## Version: 1.7.0
 ## OptionalDeps: mQoL
 ## SavedVariables: DungeonTeleportsTab_DB
 
 DungeonTeleportsTab_Utils.lua
+mQoL_Utils.lua
 mQoL_VersionDetection.lua
 mQoL_Styles.lua
 DungeonTeleportsTab.lua

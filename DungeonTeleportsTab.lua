@@ -1,17 +1,34 @@
 -- Check for mQoL version 1.2.0 and greater before loading to prevent conflicts, as this module is now built into mQoL 1.2.0
-local Utils = DungeonTeleportsTab_Utils
-local isMQoLActive = (_G.mQoL ~= nil) or Utils.IsAddOnActive("mQoL")
+local Dungeon_Utils = DungeonTeleportsTab_Utils
+local isMQoLActive = (_G.mQoL ~= nil) or Dungeon_Utils.IsAddOnActive("mQoL")
 local detectedMQoLVersion = isMQoLActive and (
     (_G.mQoL and mQoL.version)
-    or Utils.GetAddOnVersion("mQoL")
+    or Dungeon_Utils.GetAddOnVersion("mQoL")
 ) or nil
 
-if isMQoLActive and detectedMQoLVersion and Utils.IsVersionAtLeast(detectedMQoLVersion, "1.2.0") then
+if isMQoLActive and detectedMQoLVersion and Dungeon_Utils.IsVersionAtLeast(detectedMQoLVersion, "1.2.0") then
     C_Timer.After(3, function()
         print("|cffFF6B6BDungeon Teleports Tab|r: Detected active mQoL addon v" .. tostring(detectedMQoLVersion) .. " with this module built-in. DungeonTeleportsTab addon will not load to avoid conflicts. Dungeon Teleports Tab are already available in mQoL.")
     end)
     return
 end
+
+local clientInfo = mQoL_VersionDetection and mQoL_VersionDetection.clientInfo or {}
+local utils = mQoL_Utils
+local IsInCombat = utils.IsInCombat
+local ShallowCopyTable = utils.ShallowCopy
+local GetSecondsUntilWeeklyReset = utils.GetSecondsUntilWeeklyReset
+local GetSecondsUntilDailyReset = utils.GetSecondsUntilDailyReset
+local ParseYMD = utils.ParseYMD
+local YMDToEpochDays = utils.YMDToEpochDays
+local EpochDaysToYMD = utils.EpochDaysToYMD
+local ShiftYMDByDays = utils.ShiftYMDByDays
+local DetectRegionForWeeklyReset = utils.DetectRegionForWeeklyReset
+local ConvertEUWeeklyYMDToCurrentRegion = utils.ConvertEUWeeklyYMDToCurrentRegion
+local GetNextResetTimestamp = utils.GetNextResetTimestamp
+local GetYMDTimestampAtReset = utils.GetYMDTimestampAtReset
+local GetTodayYMD = utils.GetTodayYMD
+local FormatRemainingDuration = utils.FormatRemainingDuration
 
 local function GetSpellCooldownWrapper(spellID)
     -- Use C_Spell.GetSpellCooldown and handle protected secret numbers
@@ -136,10 +153,6 @@ local function RefreshButtonCooldown(btn)
     end
 end
 
-local function IsInCombat()
-    return InCombatLockdown and InCombatLockdown()
-end
-
 local function IsTeleportSpellKnown(spellID)
     if not spellID or spellID <= 0 then
         return false
@@ -167,213 +180,160 @@ local function IsTeleportSpellKnown(spellID)
     return false
 end
 
-local function GetSecondsUntilWeeklyReset()
-    if C_DateAndTime and C_DateAndTime.GetSecondsUntilWeeklyReset then
-        local seconds = C_DateAndTime.GetSecondsUntilWeeklyReset()
-        if seconds and seconds > 0 then
-            return seconds
+local function IsAchievementCompletedWrapper(achievementID)
+    if not achievementID or achievementID <= 0 then
+        return false
+    end
+
+    if _G.GetAchievementInfo then
+        local ok, _, _, _, completed = pcall(_G.GetAchievementInfo, achievementID)
+        if ok and completed ~= nil then
+            return completed and true or false
         end
     end
-    if _G.GetSecondsUntilWeeklyReset then
-        local seconds = _G.GetSecondsUntilWeeklyReset()
-        if seconds and seconds > 0 then
-            return seconds
+
+    if C_AchievementInfo and C_AchievementInfo.GetAchievementInfo then
+        local ok, info = pcall(C_AchievementInfo.GetAchievementInfo, achievementID)
+        if ok and info then
+            if info.completed ~= nil then
+                return info.completed and true or false
+            end
+            if info.isCompleted ~= nil then
+                return info.isCompleted and true or false
+            end
         end
     end
+
+    if C_AchievementInfo and C_AchievementInfo.IsAchievementCompleted then
+        local ok, completed = pcall(C_AchievementInfo.IsAchievementCompleted, achievementID)
+        if ok and completed ~= nil then
+            return completed and true or false
+        end
+    end
+
+    if C_AchievementInfo and C_AchievementInfo.IsAchievementComplete then
+        local ok, completed = pcall(C_AchievementInfo.IsAchievementComplete, achievementID)
+        if ok and completed ~= nil then
+            return completed and true or false
+        end
+    end
+
+    return false
+end
+
+local function GetTeleportAchievementIDs(entry)
+    local achievementIDs = {}
+    if type(entry) ~= "table" then
+        return achievementIDs
+    end
+
+    if type(entry.achievementID) == "number" and entry.achievementID > 0 then
+        table.insert(achievementIDs, entry.achievementID)
+    end
+
+    if type(entry.achievementIDs) == "table" then
+        for _, achievementID in ipairs(entry.achievementIDs) do
+            if type(achievementID) == "number" and achievementID > 0 then
+                table.insert(achievementIDs, achievementID)
+            end
+        end
+    end
+
+    return achievementIDs
+end
+
+local function HasRetailTeleportAchievementUnlock(entry)
+    if not clientInfo.isRetail then
+        return false
+    end
+
+    for _, achievementID in ipairs(GetTeleportAchievementIDs(entry)) do
+        if IsAchievementCompletedWrapper(achievementID) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function GetRetailRenownLevel(reputationID)
+    if not clientInfo.isRetail or not reputationID or reputationID <= 0 then
+        return nil
+    end
+
+    if C_MajorFactions and C_MajorFactions.GetCurrentRenownLevel then
+        local ok, renownLevel = pcall(C_MajorFactions.GetCurrentRenownLevel, reputationID)
+        if ok and type(renownLevel) == "number" and renownLevel >= 0 then
+            return renownLevel
+        end
+    end
+
+    if C_MajorFactions and C_MajorFactions.GetMajorFactionData then
+        local ok, data = pcall(C_MajorFactions.GetMajorFactionData, reputationID)
+        if ok and type(data) == "table" then
+            if type(data.renownLevel) == "number" then
+                return data.renownLevel
+            end
+            if type(data.level) == "number" then
+                return data.level
+            end
+        end
+    end
+
+    if C_Reputation and C_Reputation.GetFactionDataByID then
+        local ok, data = pcall(C_Reputation.GetFactionDataByID, reputationID)
+        if ok and type(data) == "table" then
+            if type(data.renownLevel) == "number" then
+                return data.renownLevel
+            end
+            if type(data.currentLevel) == "number" then
+                return data.currentLevel
+            end
+        end
+    end
+
     return nil
 end
 
-local function GetSecondsUntilDailyReset()
-    if _G.GetQuestResetTime then
-        local seconds = _G.GetQuestResetTime()
-        if seconds and seconds > 0 then
-            return seconds
-        end
+local function HasRetailTeleportReputationUnlock(entry)
+    if not clientInfo.isRetail or type(entry) ~= "table" then
+        return false
     end
-    return nil
+
+    local reputationID = entry.reputationID
+    local requiredRenown = entry.renownLevel
+    if type(reputationID) ~= "number" or reputationID <= 0 then
+        return false
+    end
+    if type(requiredRenown) ~= "number" or requiredRenown <= 0 then
+        return false
+    end
+
+    local currentRenown = GetRetailRenownLevel(reputationID)
+    return type(currentRenown) == "number" and currentRenown >= requiredRenown
 end
 
-local function ParseYMD(ymd)
-    if not ymd then
-        return nil
-    end
-
-    local value = tostring(ymd)
-    if value:len() ~= 8 then
-        return nil
-    end
-
-    local year = tonumber(value:sub(1, 4))
-    local month = tonumber(value:sub(5, 6))
-    local day = tonumber(value:sub(7, 8))
-    if not year or not month or not day then
-        return nil
-    end
-
-    if month < 1 or month > 12 then
-        return nil
-    end
-
-    local daysInMonth = ({31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31})[month]
-    local isLeapYear = (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0)
-    if month == 2 and isLeapYear then
-        daysInMonth = 29
-    end
-
-    if day < 1 or day > daysInMonth then
-        return nil
-    end
-
-    return year, month, day
+local function HasRetailTeleportUnlock(entry)
+    return HasRetailTeleportAchievementUnlock(entry) or HasRetailTeleportReputationUnlock(entry)
 end
 
--- Converts a YMD date to the number of days since the Unix epoch (January 1, 1970).
--- This code will make sure addon will function correctly even if the client is using a non-Gregorian calendar or has a different epoch, as it relies on the same underlying date calculations as the game's date functions.
-local function YMDToEpochDays(year, month, day)
-    local y = year
-    if month <= 2 then
-        y = y - 1
+local function GetRetailTeleportRequiredLevel(entry)
+    if type(entry) == "table" and type(entry.requiredLevel) == "number" and entry.requiredLevel > 0 then
+        return entry.requiredLevel
     end
-    local era
-    if y >= 0 then
-        era = math.floor(y / 400)
-    else
-        era = math.floor((y - 399) / 400)
-    end
-    local yoe = y - (era * 400)
-    local mp
-    if month > 2 then
-        mp = month - 3
-    else
-        mp = month + 9
-    end
-    local doy = math.floor((153 * mp + 2) / 5) + day - 1
-    local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
-    return era * 146097 + doe - 719468
+
+    return 80
 end
 
-local function EpochDaysToYMD(daysSinceEpoch)
-    local z = daysSinceEpoch + 719468
-    local era
-    if z >= 0 then
-        era = math.floor(z / 146097)
-    else
-        era = math.floor((z - 146096) / 146097)
-    end
-    local doe = z - era * 146097
-    local yoe = math.floor((doe - math.floor(doe / 1460) + math.floor(doe / 36524) - math.floor(doe / 146096)) / 365)
-    local y = yoe + era * 400
-    local doy = doe - (365 * yoe + math.floor(yoe / 4) - math.floor(yoe / 100))
-    local mp = math.floor((5 * doy + 2) / 153)
-    local day = doy - math.floor((153 * mp + 2) / 5) + 1
-    local month
-    if mp < 10 then
-        month = mp + 3
-    else
-        month = mp - 9
-    end
-    if month <= 2 then
-        y = y + 1
-    end
-    return y, month, day
-end
+local function GetRetailTeleportUnavailableReason(entry)
+    local playerLevel = UnitLevel and UnitLevel("player") or nil
+    local requiredLevel = GetRetailTeleportRequiredLevel(entry)
 
-local function ShiftYMDByDays(ymd, days)
-    local year, month, day = ParseYMD(ymd)
-    if not year then
-        return ymd
+    if playerLevel and requiredLevel and playerLevel < requiredLevel then
+        return string.format("This character must reach level %d to use this portal.", requiredLevel)
     end
 
-    if not days or days == 0 then
-        return tonumber(string.format("%04d%02d%02d", year, month, day))
-    end
-
-    local shiftedDays = YMDToEpochDays(year, month, day) + days
-    local shiftedYear, shiftedMonth, shiftedDay = EpochDaysToYMD(shiftedDays)
-    return tonumber(string.format("%04d%02d%02d", shiftedYear, shiftedMonth, shiftedDay))
-end
-
-local function DetectRegionForWeeklyReset()
-    local portal = _G.GetCVar and _G.GetCVar("portal")
-    if portal and portal ~= "" then
-        portal = string.upper(portal)
-        if portal == "EU" then
-            return "EU"
-        end
-        if portal == "KR" or portal == "TW" or portal == "CN" then
-            return "ASIA"
-        end
-        return "US"
-    end
-
-    if _G.GetCurrentRegion then
-        local regionID = _G.GetCurrentRegion()
-        if regionID == 3 then
-            return "EU"
-        end
-        if regionID == 2 or regionID == 4 or regionID == 5 then
-            return "ASIA"
-        end
-    end
-
-    return "EU"
-end
-
-local function ConvertEUWeeklyYMDToCurrentRegion(ymd)
-    local region = DetectRegionForWeeklyReset()
-    if region == "US" then
-        return ShiftYMDByDays(ymd, -1) -- US is 1 day before EU for weekly resets
-    end
-    return tonumber(ymd) or ymd
-end
-
-local function GetNextResetTimestamp(resetType)
-    local now = GetServerTime()
-    local seconds = resetType == "daily" and GetSecondsUntilDailyReset() or GetSecondsUntilWeeklyReset()
-    if not seconds then
-        return nil
-    end
-    return now + seconds
-end
-
-local function GetYMDTimestampAtReset(ymd, resetType)
-    local year, month, day = ParseYMD(ymd)
-    if not year then
-        return nil
-    end
-
-    local nextReset = GetNextResetTimestamp(resetType or "weekly")
-    if not nextReset then
-        return nil
-    end
-
-    local resetDate = date("*t", nextReset)
-    if not resetDate then
-        return nil
-    end
-
-    local baseDays = YMDToEpochDays(resetDate.year, resetDate.month, resetDate.day)
-    local targetDays = YMDToEpochDays(year, month, day)
-    return nextReset + ((targetDays - baseDays) * 86400)
-end
-
-local function GetTodayYMD()
-    return tonumber(date("%Y%m%d", GetServerTime()))
-end
-
-local function FormatRemainingDuration(remaining)
-    if not remaining or remaining <= 0 then
-        return "00h 00m"
-    end
-
-    local days = math.floor(remaining / 86400)
-    local hours = math.floor((remaining % 86400) / 3600)
-    local minutes = math.floor((remaining % 3600) / 60)
-
-    if days > 0 then
-        return string.format("%dd %02dh %02dm", days, hours, minutes)
-    end
-    return string.format("%02dh %02dm", hours, minutes)
+    return "This character does not currently meet the requirements to use this portal."
 end
 
 local function GetSeasonEndTimestampForDisplay(endsYMD)
@@ -476,106 +436,106 @@ local TeleportData = {
     },
 
     ["Midnight"] = {
-        { id = 2805, name = "Windrunner Spire", texture = 7464939, spellID = 1254400, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2811, name = "Magisters' Terrace", texture = 7467176, spellID = 1254572, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2874, name = "Maisara Caverns", texture = 7478532, spellID = 1254559, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2915, name = "Nexus-Point Xenas", texture = 7570499, spellID = 1254563, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2813, name = "Murder Row", texture = 7467177, spellID = 0, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        { id = 2825, name = "Den of Nalorakk", texture = 7478533, spellID = 0, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        { id = 2859, name = "The Blinding Vale", texture = 7478531, spellID = 0, location = "Harandar", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        { id = 2923, name = "Voidscar Arena", texture = 7479111, spellID = 0, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        --{ id = 2912, name = "The Voidspire", texture = 7507134, spellID = 0, location = "	Voidstorm", source = "Unknown" }, --Unconfirmed
-        --{ id = 2939, name = "The Dreamrift", texture = 7570500, spellID = 0, location = "Harandar", source = "Unknown" }, --Unconfirmed
-        --{ id = 2913, name = "March on Quel'Danas", texture = 7480125, spellID = 0, location = "Eversong Woods", source = "Unknown" }, --Unconfirmed
+        { id = 2805, name = "Windrunner Spire", texture = 7464939, artOffsetY = -0.10, spellID = 1254400, achievementID = 61262, requiredLevel = 90, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2811, name = "Magisters' Terrace", texture = 7467176, artOffsetY = 0.20, spellID = 1254572, achievementID = 61267, requiredLevel = 90, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2874, name = "Maisara Caverns", texture = 7478532, artOffsetY = -0.20, spellID = 1254559, achievementID = 61269, requiredLevel = 90, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2915, name = "Nexus-Point Xenas", texture = 7570499, artOffsetY = -0.10, spellID = 1254563, achievementID = 61268, requiredLevel = 90, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2813, name = "Murder Row", texture = 7467177, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
+        { id = 2825, name = "Den of Nalorakk", texture = 7478533, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
+        { id = 2859, name = "The Blinding Vale", texture = 7478531, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Harandar", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
+        { id = 2923, name = "Voidscar Arena", texture = 7479111, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
+        --{ id = 2912, name = "The Voidspire", texture = 7507134, spellID = 0, achievementID = 0, location = "	Voidstorm", source = "Unknown" }, --Unconfirmed
+        --{ id = 2939, name = "The Dreamrift", texture = 7570500, spellID = 0, achievementID = 0, location = "Harandar", source = "Unknown" }, --Unconfirmed
+        --{ id = 2913, name = "March on Quel'Danas", texture = 7480125, spellID = 0, achievementID = 0, location = "Eversong Woods", source = "Unknown" }, --Unconfirmed
     },
     ["The War Within"] = {
-        { id = 2660, name = "Ara-Kara, City of Echoes", texture = 5912537, spellID = 445417, location = "Azj-Kahet", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2661, name = "Cinderbrew Meadery", texture = 5912538, spellID = 445440, location = "Isle of Dorn", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2669, name = "City of Threads", texture = 5912539, spellID = 445416, location = "Azj-Kahet", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2651, name = "Darkflame Cleft", texture = 5912540, spellID = 445441, location = "Ringing Deeps", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2649, name = "Priory of the Sacred Flame", texture = 5912542, spellID = 445444, location = "Hallowfall", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2662, name = "The Dawnbreaker", texture = 5912543, spellID = 445414, location = "Hallowfall", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2648, name = "The Rookery", texture = 5912544, spellID = 445443, location = "Isle of Dorn", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2652, name = "The Stonevault", texture = 5912545, spellID = 445269, location = "Ringing Deeps", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2773, name = "Operation: Floodgate", texture = 6422410, spellID = 1216786, location = "Ringing Deeps", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2830, name = "Eco-Dome Al'dani", texture = 7074041, spellID = 1237215, location = "K'aresh", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2769, name = "Liberation of Undermine", texture = 6422409, spellID = 1226482, location = "Undermine", source = "Reach Renown 20 with Gallagio Loyalty Rewards Club.", obtainable = true },
-        { id = 2810, name = "Manaforge Omega", texture = 7049313, spellID = 1239155, location = "K'aresh", source = "Reach Renown 15 with Manaforge Vandals.", obtainable = true },
+        { id = 2660, name = "Ara-Kara, City of Echoes", texture = 5912537, artOffsetY = -0.05, spellID = 445417, achievementID = 20586, requiredLevel = 80, location = "Azj-Kahet", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2661, name = "Cinderbrew Meadery", texture = 5912538, artOffsetY = 0.20, spellID = 445440, achievementID = 20583, requiredLevel = 80, location = "Isle of Dorn", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2669, name = "City of Threads", texture = 5912539, artOffsetY = 0.0, spellID = 445416, achievementID = 20582, requiredLevel = 80, location = "Azj-Kahet", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2651, name = "Darkflame Cleft", texture = 5912540, artOffsetY = 0.20, spellID = 445441, achievementID = 20584, requiredLevel = 80, location = "Ringing Deeps", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2649, name = "Priory of the Sacred Flame", texture = 5912542, artOffsetY = -0.10, spellID = 445444, achievementID = 20581, requiredLevel = 80, location = "Hallowfall", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2662, name = "The Dawnbreaker", texture = 5912543, artOffsetY = -0.10, spellID = 445414, achievementID = 20585, requiredLevel = 80, location = "Hallowfall", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2648, name = "The Rookery", texture = 5912544, artOffsetY = 0.0, spellID = 445443, achievementID = 20579, requiredLevel = 80, location = "Isle of Dorn", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2652, name = "The Stonevault", texture = 5912545, artOffsetY = 0.0, spellID = 445269, achievementID = 20580, requiredLevel = 80, location = "Ringing Deeps", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2773, name = "Operation: Floodgate", texture = 6422410, artOffsetY = 0.10, spellID = 1216786, achievementID = 41348, requiredLevel = 80, location = "Ringing Deeps", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2830, name = "Eco-Dome Al'dani", texture = 7074041, artOffsetY = 0.10, spellID = 1237215, achievementID = 42173, requiredLevel = 80, location = "K'aresh", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2769, name = "Liberation of Undermine", texture = 6422409, artOffsetY = 0.0, spellID = 1226482, reputationID = 2685, renownLevel = 20, requiredLevel = 80, location = "Undermine", source = "Reach Renown 20 with Gallagio Loyalty Rewards Club.", obtainable = true },
+        { id = 2810, name = "Manaforge Omega", texture = 7049313, artOffsetY = 0.0, spellID = 1239155, reputationID = 2736, renownLevel = 15, requiredLevel = 80, location = "K'aresh", source = "Reach Renown 15 with Manaforge Vandals.", obtainable = true },
     },
     ["Dragonflight"] = {
-        { id = 2526, name = "Algeth'ar Academy", texture = 4742939, spellID = 393273, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2520, name = "Brackenhide Hollow", texture = 4742933, spellID = 393267, location = "Azure Span", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2527, name = "Halls of Infusion", texture = 4742936, spellID = 393283, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2519, name = "Neltharus", texture = 4742938, spellID = 393276, location = "Waking Shores", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2521, name = "Ruby Life Pools", texture = 4742937, spellID = 393256, location = "Waking Shores", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2515, name = "The Azure Vault", texture = 4742932, spellID = 393279, location = "Azure Span", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2516, name = "The Nokhud Offensive", texture = 4742934, spellID = 393262, location = "Ohn'ahran Plains", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2451, name = "Uldaman: Legacy of Tyr", texture = 4742940, spellID = 393222, location = "Badlands", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2579, name = "Dawn of the Infinite", texture = 5222376, spellID = 424197, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2522, name = "Vault of the Incarnates", texture = 4742941, spellID = 432254, location = "Thaldraszus", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
-        { id = 2569, name = "Aberrus, the Shadowed Crucible", texture = 5149417, spellID = 432257, location = "Zaralek Cavern", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
-        { id = 2549, name = "Amirdrassil, the Dream's Hope", texture = 5409262, spellID = 432258, location = "Emerald Dream", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
+        { id = 2526, name = "Algeth'ar Academy", texture = 4742939, artOffsetY = 0.0, spellID = 393273, achievementID = 16643, requiredLevel = 80, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2520, name = "Brackenhide Hollow", texture = 4742933, artOffsetY = 0.15, spellID = 393267, achievementID = 16642, requiredLevel = 80, location = "Azure Span", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2527, name = "Halls of Infusion", texture = 4742936, artOffsetY = 0.15, spellID = 393283, achievementID = 16646, requiredLevel = 80, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2519, name = "Neltharus", texture = 4742938, artOffsetY = 0.0, spellID = 393276, achievementID = 16644, requiredLevel = 80, location = "Waking Shores", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2521, name = "Ruby Life Pools", texture = 4742937, artOffsetY = 0.0, spellID = 393256, achievementID = 16640, requiredLevel = 80, location = "Waking Shores", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2515, name = "The Azure Vault", texture = 4742932, artOffsetY = 0.0, spellID = 393279, achievementID = 16645, requiredLevel = 80, location = "Azure Span", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2516, name = "The Nokhud Offensive", texture = 4742934, artOffsetY = 0.0, spellID = 393262, achievementID = 16641, requiredLevel = 80, location = "Ohn'ahran Plains", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2451, name = "Uldaman: Legacy of Tyr", texture = 4742940, artOffsetY = 0.0, spellID = 393222, achievementID = 16639, requiredLevel = 80, location = "Badlands", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2579, name = "Dawn of the Infinite", texture = 5222376, artOffsetY = 0.0, spellID = 424197, achievementID = 19088, requiredLevel = 80, location = "Thaldraszus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2522, name = "Vault of the Incarnates", texture = 4742941, artOffsetY = 0.0, spellID = 432254, achievementID = 19576, requiredLevel = 80, location = "Thaldraszus", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
+        { id = 2569, name = "Aberrus, the Shadowed Crucible", texture = 5149417, artOffsetY = -0.10, spellID = 432257, achievementID = 19576, requiredLevel = 80, location = "Zaralek Cavern", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
+        { id = 2549, name = "Amirdrassil, the Dream's Hope", texture = 5409262, artOffsetY = 0.0, spellID = 432258, achievementID = 19576, requiredLevel = 80, location = "Emerald Dream", source = "Complete Achievement Mythic: Awakening the Dragonflight Raids" },
     },
     ["Shadowlands"] = {
-        { id = 2286, name = "The Necrotic Wake", texture = 3759920, spellID = 354462, location = "Bastion", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2289, name = "Plaguefall", texture = 3759921, spellID = 354463, location = "Maldraxxus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2290, name = "Mists of Tirna Scithe", texture = 3759919, spellID = 354464, location = "Ardenweald", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2287, name = "Halls of Atonement", texture = 3759918, spellID = 354465, location = "Revendreth", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2293, name = "Theater of Pain", texture = 3759924, spellID = 354467, location = "Maldraxxus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2291, name = "De Other Side", texture = 3759925, spellID = 354468, location = "Ardenweald", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2285, name = "Spires of Ascension", texture = 3759923, spellID = 354466, location = "Bastion", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2284, name = "Sanguine Depths", texture = 3759922, spellID = 354469, location = "Revendreth", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2441, name = "Tazavesh, the Veiled Market", texture = 4182024, spellID = 367416, location = "Tazavesh", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2296, name = "Castle Nathria", texture = 3759916, spellID = 373190, location = "Revendreth", source = "Complete Achievement Mythic: Fates of the Shadowlands Raids" },
-        { id = 2450, name = "Sanctum of Domination", texture = 4182023, spellID = 373191, location = "The Maw", source = "Complete Achievement Mythic: Fates of the Shadowlands Raids" },
-        { id = 2481, name = "Sepulcher of the First Ones", texture = 4425895, spellID = 373192, location = "Zereth Mortis", source = "Complete Achievement Mythic: Fates of the Shadowlands Raids" },
+        { id = 2286, name = "The Necrotic Wake", texture = 3759920, artOffsetY = -0.20, spellID = 354462, achievementID = 15045, requiredLevel = 80, location = "Bastion", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2289, name = "Plaguefall", texture = 3759921, artOffsetY = 0.10, spellID = 354463, achievementID = 15046, requiredLevel = 80, location = "Maldraxxus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2290, name = "Mists of Tirna Scithe", texture = 3759919, artOffsetY = 0.10, spellID = 354464, achievementID = 15047, requiredLevel = 80, location = "Ardenweald", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2287, name = "Halls of Atonement", texture = 3759918, artOffsetY = 0.0, spellID = 354465, achievementID = 15048, requiredLevel = 80, location = "Revendreth", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2293, name = "Theater of Pain", texture = 3759924, artOffsetY = 0.20, spellID = 354467, achievementID = 15050, requiredLevel = 80, location = "Maldraxxus", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2291, name = "De Other Side", texture = 3759925, artOffsetY = 0.0, spellID = 354468, achievementID = 15051, requiredLevel = 80, location = "Ardenweald", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2285, name = "Spires of Ascension", texture = 3759923, artOffsetY = 0.10, spellID = 354466, achievementID = 15049, requiredLevel = 80, location = "Bastion", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2284, name = "Sanguine Depths", texture = 3759922, artOffsetY = 0.10, spellID = 354469, achievementID = 15052, requiredLevel = 80, location = "Revendreth", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2441, name = "Tazavesh, the Veiled Market", texture = 4182024, artOffsetY = 0.10, spellID = 367416, achievementID = 15500, requiredLevel = 80, location = "Tazavesh", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2296, name = "Castle Nathria", texture = 3759916, artOffsetY = 0.20, spellID = 373190, achievementID = 15687, requiredLevel = 80, location = "Revendreth", source = "Complete Achievement Mythic: Fates of the Shadowlands Raids" },
+        { id = 2450, name = "Sanctum of Domination", texture = 4182023, artOffsetY = 0.0, spellID = 373191, achievementID = 15687, requiredLevel = 80, location = "The Maw", source = "Complete Achievement Mythic: Fates of the Shadowlands Raids" },
+        { id = 2481, name = "Sepulcher of the First Ones", texture = 4425895, artOffsetY = 0.0, spellID = 373192, achievementID = 15687, requiredLevel = 80, location = "Zereth Mortis", source = "Complete Achievement Mythic: Fates of the Shadowlands Raids" },
     },
     ["Battle for Azeroth"] = {
-        { id = 1763, name = "Atal'Dazar", texture = 1778890, spellID = 424187, location = "Zuldazar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1754, name = "Freehold", texture = 1778891, spellID = 410071, location = "Tiragarde Sound", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1822, name = "Siege of Boralus", texture = 2177726, spellIDHorde = 464256, spellIDAlly = 445418, location = "Tiragarde Sound", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 1594, name = "The Motherlode!!", texture = 2177728, spellIDHorde = 467555, spellIDAlly = 467553, location = "Zuldazar", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 1841, name = "The Underrot", texture = 2177729, spellID = 410074, location = "Nazmir", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1862, name = "Waycrest Manor", texture = 2177732, spellID = 424167, location = "Drustvar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 2097, name = "Operation: Mechagon", texture = 3025327, spellID = 373274, location = "Mechagon Island", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1763, name = "Atal'Dazar", texture = 1778890, artOffsetY = 0.0, spellID = 424187, achievementID = 19087, requiredLevel = 80, location = "Zuldazar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1754, name = "Freehold", texture = 1778891, artOffsetY = 0.0, spellID = 410071, achievementID = 17848, requiredLevel = 80, location = "Tiragarde Sound", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1822, name = "Siege of Boralus", texture = 2177726, artOffsetY = 0.20, spellIDHorde = 464256, spellIDAlly = 445418, achievementID = 20587, requiredLevel = 80, location = "Tiragarde Sound", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1594, name = "The Motherlode!!", texture = 2177728, artOffsetY = 0.25, spellIDHorde = 467555, spellIDAlly = 467553, achievementID = 40965, requiredLevel = 80, location = "Zuldazar", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1841, name = "The Underrot", texture = 2177729, artOffsetY = 0.10, spellID = 410074, achievementID = 17849, requiredLevel = 80, location = "Nazmir", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1862, name = "Waycrest Manor", texture = 2177732, artOffsetY = 0.0, spellID = 424167, achievementID = 19086, requiredLevel = 80, location = "Drustvar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 2097, name = "Operation: Mechagon", texture = 3025327, artOffsetY = 0.20, spellID = 373274, achievementIDs = { 15693, 40966 }, requiredLevel = 80, location = "Mechagon Island", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
     },
     ["Legion"] = {
-        { id = 1501, name = "Black Rook Hold", texture = 1411847, spellID = 424153, location = "Val'sharah", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1571, name = "Court of Stars", texture = 1498152, spellID = 393766, location = "Suramar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1466, name = "Darkheart Thicket", texture = 1411849, spellID = 424163, location = "Val'sharah", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1477, name = "Halls of Valor", texture = 1498154, spellID = 393764, location = "Stormheim", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1458, name = "Neltharion's Lair", texture = 1450572, spellID = 410078, location = "Highmountain", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1651, name = "Return to Karazhan", texture = 1537281, spellID = 373262, location = "Deadwind Pass", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1753, name = "Seat of the Triumvirate", texture = 1718205, spellID = 1254551, location="Mac'Aree / Eredar", source="Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1501, name = "Black Rook Hold", texture = 1411847, artOffsetY = -0.10, spellID = 424153, achievementID = 19084, requiredLevel = 80, location = "Val'sharah", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1571, name = "Court of Stars", texture = 1498152, artOffsetY = 0.10, spellID = 393766, achievementID = 16658, requiredLevel = 80, location = "Suramar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1466, name = "Darkheart Thicket", texture = 1411849, artOffsetY = 0.20, spellID = 424163, achievementID = 19085, requiredLevel = 80, location = "Val'sharah", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1477, name = "Halls of Valor", texture = 1498154, artOffsetY = -0.10, spellID = 393764, achievementID = 16659, requiredLevel = 80, location = "Stormheim", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1458, name = "Neltharion's Lair", texture = 1450572, artOffsetY = 0.20, spellID = 410078, achievementID = 17850, requiredLevel = 80, location = "Highmountain", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1651, name = "Return to Karazhan", texture = 1537281, artOffsetY = 0.10, spellID = 373262, achievementID = 15692, requiredLevel = 80, location = "Deadwind Pass", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1753, name = "Seat of the Triumvirate", texture = 1718205, artOffsetY = 0.10, spellID=1254551, achievementID = 61270, requiredLevel=90, location="Mac'Aree / Eredar", source="Complete Mythic Keystone on Level 10 or higher within the time limit." },
     },
     ["Warlords of Draenor"] = {
-        { id = 1175, name = "Bloodmaul Slag Mines", texture = 1041984, spellID = 159895, location = "Frostfire Ridge", source = "Challenge Mode: Gold (Legacy)" },
-        { id = 1208, name = "Grimrail Depot", texture = 1041986, spellID = 159900, location = "Gorgrond", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1195, name = "Iron Docks", texture = 1060546, spellID = 159896, location = "Gorgrond", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1182, name = "Auchindoun", texture = 1041982, spellID = 159897, location = "Talador", source = "Challenge Mode: Gold (Legacy)" },
-        { id = 1279, name = "The Everbloom", texture = 1060545, spellID = 159901, location = "Gorgrond", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1176, name = "Shadowmoon Burial Grounds", texture = 1041988, spellID = 159899, location = "Shadowmoon Valley", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 1358, name = "Upper Blackrock Spire", texture = 1041990, spellID = 159902, location = "Blackrock Mountain", source = "Challenge Mode: Gold (Legacy)"},
-        { id = 1209, name = "Skyreach", texture = 1041989, spellID = 159898, location = "Spires of Arak", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1175, name = "Bloodmaul Slag Mines", texture = 1041984, artOffsetY = -0.10, spellID = 159895, achievementID = 8878,  requiredLevel = 80, location = "Frostfire Ridge", source = "Challenge Mode: Gold (Legacy)" },
+        { id = 1208, name = "Grimrail Depot", texture = 1041986, artOffsetY = -0.10, spellID = 159900, achievementIDs = { 8890, 15695 }, requiredLevel = 80, location = "Gorgrond", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1195, name = "Iron Docks", texture = 1060546, artOffsetY = -0.10, spellID = 159896, achievementIDs = { 9000, 15694 }, requiredLevel = 80, location = "Gorgrond", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1182, name = "Auchindoun", texture = 1041982, artOffsetY = -0.20, spellID = 159897, achievementID = 8882, requiredLevel = 80, location = "Talador", source = "Challenge Mode: Gold (Legacy)" },
+        { id = 1279, name = "The Everbloom", texture = 1060545, spellID = 159901, achievementIDs = { 9004, 19083 }, requiredLevel = 80, location = "Gorgrond", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1176, name = "Shadowmoon Burial Grounds", texture = 1041988, artOffsetY = 0.10, spellID = 159899, achievementIDs = { 8886, 16660 }, requiredLevel = 80, location = "Shadowmoon Valley", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 1358, name = "Upper Blackrock Spire", texture = 1041990, spellID = 159902, achievementID = 8894, requiredLevel = 80, location = "Blackrock Mountain", source = "Challenge Mode: Gold (Legacy)"},
+        { id = 1209, name = "Skyreach", texture = 1041989, artOffsetY = -0.20, spellID = 159898, achievementIDs = { 8874, 61272 }, requiredLevel=90, location = "Spires of Arak", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 10 or higher within the time limit." },
     },
     ["Mists of Pandaria"] = {
-        { id = 960, name = "Temple of the Jade Serpent", texture = 632283, spellID = 131204, location = "Jade Forest", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit.", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 961, name = "Stormstout Brewery", texture = 632282, spellID = 131205, location = "Valley of the Four Winds", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 959, name = "Shado-Pan Monastery", texture = 632281, spellID = 131206, location = "Kun-Lai Summit", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 994, name = "Mogu'shan Palace", texture = 632279, spellID = 131222, location = "Vale of Eternal Blossoms", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 962, name = "Gate of the Setting Sun", texture = 632277, spellID = 131225, location = "Vale of Eternal Blossoms", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 1011, name = "Siege of Niuzao Temple", texture = 643266, spellID = 131228, location = "Townlong Steppes", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 1001, name = "Scarlet Halls", texture = 643265, spellID = 131231, location = "Tirisfal Glades", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 1004, name = "Scarlet Monastery", texture = 608253, spellID = 131229, location = "Tirisfal Glades", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
-        { id = 1007, name = "Scholomance", texture = 608254, spellID = 131232, location = "Western Plaguelands", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 960, name = "Temple of the Jade Serpent", texture = 632283, artOffsetY = 0.10, spellID = 131204, achievementIDs = { 6887, 16661 }, requiredLevel = 80, location = "Jade Forest", source = "Challenge Mode: Gold (Legacy) or Complete Mythic Keystone on Level 20 or higher within the time limit.", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 961, name = "Stormstout Brewery", texture = 632282, artOffsetY = 0.0, spellID = 131205, achievementID = 6891, requiredLevel = 80, location = "Valley of the Four Winds", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 959, name = "Shado-Pan Monastery", texture = 632281, artOffsetY = -0.10, spellID = 131206, achievementID = 6904, requiredLevel = 80, location = "Kun-Lai Summit", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 994, name = "Mogu'shan Palace", texture = 632279, artOffsetY = 0.20, spellID = 131222, achievementID = 6901, requiredLevel = 80, location = "Vale of Eternal Blossoms", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 962, name = "Gate of the Setting Sun", texture = 632277, artOffsetY = 0.10, spellID = 131225, achievementID = 6907, requiredLevel = 80, location = "Vale of Eternal Blossoms", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 1011, name = "Siege of Niuzao Temple", texture = 643266, artOffsetY = 0.10, spellID = 131228, achievementID = 6919, requiredLevel = 80, location = "Townlong Steppes", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 1001, name = "Scarlet Halls", texture = 643265, artOffsetY = 0.0, spellID = 131231, achievementID = 6910, requiredLevel = 80, location = "Tirisfal Glades", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 1004, name = "Scarlet Monastery", texture = 608253, artOffsetY = 0.10, spellID = 131229, achievementID = 6913, requiredLevel = 80, location = "Tirisfal Glades", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
+        { id = 1007, name = "Scholomance", texture = 608254, artOffsetY = 0.10, spellID = 131232, achievementID = 6916, requiredLevel = 80, location = "Western Plaguelands", source = "Challenge Mode: Gold (Legacy)", sourceClassic = "Complete this dungeon on Challenge Mode with a Gold rating or better.", obtainableClassic = true },
     },
     ["Cataclysm"] = {
-        { id = 657, name = "Vortex Pinnacle", texture = 526414, spellID = 410080, location = "Uldum", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 643, name = "Throne of the Tides", texture = 526413, spellID = 424142, location = "Vashj'ir", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
-        { id = 670, name = "Grim Batol", texture = 526406, spellID = 445424, location = "Twilight Highlands", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 657, name = "Vortex Pinnacle", texture = 526414, artOffsetY = -0.20, spellID = 410080, achievementID = 17847, requiredLevel = 80, location = "Uldum", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 643, name = "Throne of the Tides", texture = 526413, artOffsetY = 0.10, spellID = 424142, achievementID = 19082, requiredLevel = 80, location = "Vashj'ir", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
+        { id = 670, name = "Grim Batol", texture = 526406, artOffsetY = 0.20, spellID = 445424, achievementID = 20588, requiredLevel = 80, location = "Twilight Highlands", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
     },
     ["Wrath of the Lich King"] = {
-        { id = 658, name = "Pit of Saron", texture = 608249, spellID = 1254555, location = "Icecrown", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 658, name = "Pit of Saron", texture = 608249, spellID = 1254555, achievementID = 61271, requiredLevel = 90, location = "Icecrown", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
     }
 }
 
@@ -630,18 +590,6 @@ local function GetCategoryEntriesAndMeta(categoryValue)
     end
 
     return categoryData, nil
-end
-
-local function ShallowCopyTable(source)
-    local copy = {}
-    if type(source) ~= "table" then
-        return copy
-    end
-
-    for key, value in pairs(source) do
-        copy[key] = value
-    end
-    return copy
 end
 
 local function GetTeleportIdFromEntry(entry)
@@ -805,6 +753,505 @@ local function GetDungeonTeleportsTabConfig()
         selectedCategoryText = isClassicLayout and "Mists of Pandaria" or "Midnight Season 1",
     }
 end
+
+local TELEPORT_IMAGE_CROP_LEFT = 0.05
+local TELEPORT_IMAGE_CROP_RIGHT = 0.70
+local TELEPORT_IMAGE_CROP_TOP = 0.00
+local TELEPORT_IMAGE_CROP_BOTTOM = 0.70
+local TELEPORT_CARD_IMAGE_HEIGHT = 63
+local TELEPORT_CARD_INFO_HEIGHT = 38
+local TELEPORT_CARD_HEIGHT = TELEPORT_CARD_IMAGE_HEIGHT + TELEPORT_CARD_INFO_HEIGHT
+
+-- Per-entry artOffsetY moves the crop window vertically without changing zoom.
+local function GetTeleportArtValue(info, fieldName, fallbackFieldName)
+    if type(info) ~= "table" then
+        return nil
+    end
+
+    local value = info[fieldName]
+    if type(value) ~= "number" and fallbackFieldName then
+        value = info[fallbackFieldName]
+    end
+
+    if type(value) == "number" then
+        return value
+    end
+
+    return nil
+end
+
+local function ApplyTeleportImageTexture(btn, info, targetWidth, targetHeight)
+    local textureID = info and info.texture
+    if not btn or not btn.imageArea or not textureID or textureID <= 0 then
+        return
+    end
+
+    btn.imageArea:ClearAllPoints()
+    btn.imageArea:SetAllPoints(btn.imageContainer)
+    btn.imageArea:SetTexture(textureID)
+
+    local left = TELEPORT_IMAGE_CROP_LEFT
+    local right = TELEPORT_IMAGE_CROP_RIGHT
+    local top = TELEPORT_IMAGE_CROP_TOP
+    local bottom = TELEPORT_IMAGE_CROP_BOTTOM
+
+    if targetWidth and targetHeight and targetWidth > 0 and targetHeight > 0 then
+        local targetAspect = targetWidth / targetHeight
+        local cropWidth = right - left
+        local cropHeight = bottom - top
+        local cropAspect = cropWidth / cropHeight
+
+        if targetAspect > cropAspect then
+            local newHeight = cropWidth / targetAspect
+            local offset = (cropHeight - newHeight) * 0.5
+            top = top + offset
+            bottom = bottom - offset
+        elseif targetAspect < cropAspect then
+            local newWidth = cropHeight * targetAspect
+            local offset = (cropWidth - newWidth) * 0.5
+            left = left + offset
+            right = right - offset
+        end
+
+        local artOffsetY = GetTeleportArtValue(info, "artOffsetY", "artoffsety") or GetTeleportArtValue(info, "artY", "arty")
+        if artOffsetY and artOffsetY ~= 0 then
+            local height = bottom - top
+            local offset = height * artOffsetY
+            top = top + offset
+            bottom = bottom + offset
+
+            if top < 0 then
+                bottom = bottom - top
+                top = 0
+            elseif bottom > 1 then
+                top = top - (bottom - 1)
+                bottom = 1
+            end
+        end
+    end
+
+    btn.imageArea:SetTexCoord(left, right, top, bottom)
+end
+
+local LISTED_DUNGEON_HIGHLIGHT_TEXTURE = "Interface\\Tooltips\\UI-Tooltip-Border"
+local LISTED_DUNGEON_HIGHLIGHT_STRONG_TEXTURE = "Interface\\Buttons\\WHITE8x8"
+local LISTED_DUNGEON_HIGHLIGHT_COLOR = { 1.00, 0.82, 0.00, 0.95 }
+local LISTED_DUNGEON_TOOLTIP_COLOR = { 1.00, 0.82, 0.00 }
+
+local function AddListedDungeonHighlightTooltipLine()
+    GameTooltip:AddLine("Your group is listed for this dungeon.", LISTED_DUNGEON_TOOLTIP_COLOR[1], LISTED_DUNGEON_TOOLTIP_COLOR[2], LISTED_DUNGEON_TOOLTIP_COLOR[3], true)
+end
+
+local listedDungeonHighlightState = {
+    activeTeleportID = nil,
+    activeSignature = nil,
+    activeSpellIDs = nil,
+    groupGUID = nil,
+    suppressedSignature = nil,
+    wasInGroup = false,
+    ignoreActiveEntryUntilClear = false,
+}
+
+local listedDungeonHighlightListeners = {}
+
+local function NotifyListedDungeonHighlightChanged()
+    for _, listener in ipairs(listedDungeonHighlightListeners) do
+        listener()
+    end
+end
+
+local function RegisterListedDungeonHighlightListener(listener)
+    if type(listener) ~= "function" then
+        return
+    end
+
+    table.insert(listedDungeonHighlightListeners, listener)
+    listener()
+end
+
+local function EnsureListedDungeonHighlight(btn)
+    if not btn or btn.listedDungeonHighlight then
+        return
+    end
+
+    local highlight = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+    highlight:SetPoint("TOPLEFT", -4, 4)
+    highlight:SetPoint("BOTTOMRIGHT", 4, -4)
+    highlight:SetFrameLevel(math.max(btn.border and (btn.border:GetFrameLevel() or 0) or 0, btn:GetFrameLevel() or 0) + 2)
+    highlight:SetBackdrop({
+        edgeFile = LISTED_DUNGEON_HIGHLIGHT_TEXTURE,
+        edgeSize = 16,
+    })
+    highlight:SetBackdropBorderColor(unpack(LISTED_DUNGEON_HIGHLIGHT_COLOR))
+
+    local strongBorder = CreateFrame("Frame", nil, highlight, "BackdropTemplate")
+    strongBorder:SetPoint("TOPLEFT", 3, -3)
+    strongBorder:SetPoint("BOTTOMRIGHT", -3, 3)
+    strongBorder:SetBackdrop({
+        edgeFile = LISTED_DUNGEON_HIGHLIGHT_STRONG_TEXTURE,
+        edgeSize = 2,
+    })
+    strongBorder:SetBackdropBorderColor(unpack(LISTED_DUNGEON_HIGHLIGHT_COLOR))
+    strongBorder:EnableMouse(false)
+    highlight.strongBorder = strongBorder
+
+    highlight:EnableMouse(false)
+    highlight:Hide()
+
+    btn.listedDungeonHighlight = highlight
+end
+
+local GetCurrentInstanceMapID
+
+local function IsSpellCooldownActive(spellID)
+    spellID = tonumber(spellID) or 0
+    if spellID <= 0 then
+        return false
+    end
+
+    local start, duration = GetSpellCooldownWrapper(spellID)
+    local ok, isActive = pcall(function()
+        start = tonumber(start) or 0
+        duration = tonumber(duration) or 0
+        return start > 0 and duration > 1.5
+    end)
+
+    return ok and isActive
+end
+
+local function IsAnyListedDungeonTeleportSpellOnCooldown(primarySpellID)
+    if IsSpellCooldownActive(primarySpellID) then
+        return true
+    end
+
+    for spellID in pairs(listedDungeonHighlightState.activeSpellIDs or {}) do
+        if spellID ~= primarySpellID and IsSpellCooldownActive(spellID) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsTeleportHighlightedForListedDungeon(teleportID, spellID)
+    teleportID = tonumber(teleportID) or 0
+    if teleportID <= 0 then
+        return false
+    end
+
+    local state = listedDungeonHighlightState
+    if state.activeTeleportID ~= teleportID
+        or state.activeSignature == nil
+        or state.activeSignature == state.suppressedSignature then
+        return false
+    end
+
+    if GetCurrentInstanceMapID and GetCurrentInstanceMapID() == teleportID then
+        return false
+    end
+
+    if IsAnyListedDungeonTeleportSpellOnCooldown(spellID) then
+        return false
+    end
+
+    return true
+end
+
+local function ApplyListedDungeonHighlight(btn)
+    if not btn then
+        return
+    end
+
+    local isHighlighted = IsTeleportHighlightedForListedDungeon(btn.teleportID, btn.currentSpellID)
+    btn.isListedDungeonHighlightActive = isHighlighted
+
+    if btn.listedDungeonHighlight then
+        if isHighlighted then
+            btn.listedDungeonHighlight:Show()
+        else
+            btn.listedDungeonHighlight:Hide()
+        end
+    end
+end
+
+local function BuildTeleportSpellIDLookup(teleportID)
+    local lookup = {}
+    local entry = FindTeleportDefinitionById(teleportID)
+    if type(entry) ~= "table" then
+        return lookup
+    end
+
+    entry = ApplyClientEntryOverrides(entry)
+
+    local function AddSpellID(spellID)
+        spellID = tonumber(spellID) or 0
+        if spellID > 0 then
+            lookup[spellID] = true
+        end
+    end
+
+    AddSpellID(entry.spellID)
+    AddSpellID(entry.spellIDHorde)
+    AddSpellID(entry.spellIDAlly)
+
+    return lookup
+end
+
+local function IsDungeonListingActivity(activityInfo)
+    if type(activityInfo) ~= "table" then
+        return false
+    end
+
+    local dungeonCategoryID = GROUP_FINDER_CATEGORY_ID_DUNGEONS or 2
+    return activityInfo.categoryID == dungeonCategoryID
+        or activityInfo.isMythicPlusActivity
+        or activityInfo.isMythicActivity
+end
+
+local function GetActiveListedDungeonInfo()
+    if not C_LFGList or not C_LFGList.GetActiveEntryInfo or not C_LFGList.GetActivityInfoTable then
+        return nil, false
+    end
+
+    if C_LFGList.HasActiveEntryInfo then
+        local okHasActive, hasActive = pcall(C_LFGList.HasActiveEntryInfo)
+        if okHasActive and not hasActive then
+            return nil, false
+        end
+    end
+
+    local okEntry, activeEntryInfo = pcall(C_LFGList.GetActiveEntryInfo)
+    if not okEntry or type(activeEntryInfo) ~= "table" then
+        return nil, false
+    end
+
+    local activityIDs = activeEntryInfo.activityIDs
+    if type(activityIDs) ~= "table" then
+        local activityID = tonumber(activeEntryInfo.activityID)
+        activityIDs = activityID and { activityID } or nil
+    end
+    if type(activityIDs) ~= "table" then
+        return nil, true
+    end
+
+    for _, activityID in ipairs(activityIDs) do
+        activityID = tonumber(activityID) or 0
+        if activityID > 0 then
+            local okActivity, activityInfo = pcall(C_LFGList.GetActivityInfoTable, activityID, activeEntryInfo.questID)
+            if okActivity and IsDungeonListingActivity(activityInfo) then
+                local teleportID = tonumber(activityInfo.mapID) or 0
+                if teleportID > 0 and FindTeleportDefinitionById(teleportID) then
+                    return {
+                        teleportID = teleportID,
+                        activityID = activityID,
+                        groupGUID = activeEntryInfo.partyGUID,
+                        signature = tostring(teleportID),
+                    }, true
+                end
+            end
+        end
+    end
+
+    return nil, true
+end
+
+local function ResetListedDungeonHighlightState(keepSuppressedSignature)
+    local hadState = listedDungeonHighlightState.activeSignature ~= nil
+        or listedDungeonHighlightState.groupGUID ~= nil
+        or (not keepSuppressedSignature and listedDungeonHighlightState.suppressedSignature ~= nil)
+
+    listedDungeonHighlightState.activeTeleportID = nil
+    listedDungeonHighlightState.activeSignature = nil
+    listedDungeonHighlightState.activeSpellIDs = nil
+    listedDungeonHighlightState.groupGUID = nil
+    if not keepSuppressedSignature then
+        listedDungeonHighlightState.suppressedSignature = nil
+    end
+
+    return hadState
+end
+
+local function SetActiveListedDungeonHighlight(info)
+    if type(info) ~= "table" or not info.teleportID or not info.signature then
+        return ResetListedDungeonHighlightState()
+    end
+
+    local state = listedDungeonHighlightState
+    local changed = false
+
+    if info.groupGUID and state.groupGUID and info.groupGUID ~= state.groupGUID then
+        state.suppressedSignature = nil
+        changed = true
+    elseif state.suppressedSignature and state.suppressedSignature ~= info.signature then
+        state.suppressedSignature = nil
+        changed = true
+    end
+
+    if state.activeTeleportID ~= info.teleportID then
+        state.activeTeleportID = info.teleportID
+        changed = true
+    end
+
+    if state.activeSignature ~= info.signature then
+        state.activeSignature = info.signature
+        changed = true
+    end
+
+    if state.groupGUID ~= info.groupGUID then
+        state.groupGUID = info.groupGUID
+        changed = true
+    end
+
+    if changed or not state.activeSpellIDs then
+        state.activeSpellIDs = BuildTeleportSpellIDLookup(info.teleportID)
+    end
+
+    return changed
+end
+
+local function IsPlayerInAnyGroup()
+    if not IsInGroup then
+        return false
+    end
+
+    if LE_PARTY_CATEGORY_HOME then
+        return IsInGroup(LE_PARTY_CATEGORY_HOME)
+    end
+
+    return IsInGroup()
+end
+
+local function UpdateListedDungeonHighlightState()
+    local state = listedDungeonHighlightState
+    local isInGroup = IsPlayerInAnyGroup()
+    local changed = false
+
+    if state.wasInGroup and not isInGroup then
+        state.ignoreActiveEntryUntilClear = true
+        changed = ResetListedDungeonHighlightState() or changed
+        state.wasInGroup = false
+        if changed then
+            NotifyListedDungeonHighlightChanged()
+        end
+        return
+    end
+    state.wasInGroup = isInGroup
+    if isInGroup then
+        state.ignoreActiveEntryUntilClear = false
+    end
+
+    local info, hasActiveEntry = GetActiveListedDungeonInfo()
+    if state.ignoreActiveEntryUntilClear then
+        if hasActiveEntry then
+            changed = ResetListedDungeonHighlightState() or changed
+            if changed then
+                NotifyListedDungeonHighlightChanged()
+            end
+            return
+        end
+        state.ignoreActiveEntryUntilClear = false
+    end
+
+    if info then
+        changed = SetActiveListedDungeonHighlight(info) or changed
+    elseif not isInGroup then
+        changed = ResetListedDungeonHighlightState() or changed
+    end
+
+    if changed then
+        NotifyListedDungeonHighlightChanged()
+    end
+end
+
+GetCurrentInstanceMapID = function()
+    if IsInInstance then
+        local inInstance = IsInInstance()
+        if not inInstance then
+            return nil
+        end
+    end
+
+    if not GetInstanceInfo then
+        return nil
+    end
+
+    local _, instanceType, _, _, _, _, _, instanceMapID = GetInstanceInfo()
+    instanceMapID = tonumber(instanceMapID) or 0
+    if instanceMapID <= 0 or instanceType == "none" then
+        return nil
+    end
+
+    return instanceMapID
+end
+
+local function SuppressListedDungeonHighlightForCurrentInstance()
+    local state = listedDungeonHighlightState
+    local instanceMapID = GetCurrentInstanceMapID()
+    if not instanceMapID or not state.activeTeleportID or not state.activeSignature then
+        return
+    end
+
+    if instanceMapID ~= state.activeTeleportID then
+        return
+    end
+
+    if state.suppressedSignature ~= state.activeSignature then
+        state.suppressedSignature = state.activeSignature
+        NotifyListedDungeonHighlightChanged()
+    end
+end
+
+local function SuppressListedDungeonHighlightForSpell(spellID)
+    spellID = tonumber(spellID) or 0
+    local state = listedDungeonHighlightState
+    if spellID <= 0 or not state.activeSignature or not state.activeSpellIDs or not state.activeSpellIDs[spellID] then
+        return
+    end
+
+    if state.suppressedSignature ~= state.activeSignature then
+        state.suppressedSignature = state.activeSignature
+        NotifyListedDungeonHighlightChanged()
+    end
+end
+
+local function ExtractSpellIDFromSpellcastEvent(...)
+    for index = select("#", ...), 1, -1 do
+        local value = select(index, ...)
+        if type(value) == "number" and value > 0 then
+            return value
+        end
+    end
+
+    return nil
+end
+
+local listedDungeonHighlightEventFrame = CreateFrame("Frame")
+local function RegisterListedDungeonHighlightEvent(eventName)
+    pcall(listedDungeonHighlightEventFrame.RegisterEvent, listedDungeonHighlightEventFrame, eventName)
+end
+
+RegisterListedDungeonHighlightEvent("PLAYER_ENTERING_WORLD")
+RegisterListedDungeonHighlightEvent("ZONE_CHANGED_NEW_AREA")
+RegisterListedDungeonHighlightEvent("GROUP_ROSTER_UPDATE")
+RegisterListedDungeonHighlightEvent("PARTY_LEADER_CHANGED")
+RegisterListedDungeonHighlightEvent("LFG_LIST_ACTIVE_ENTRY_UPDATE")
+RegisterListedDungeonHighlightEvent("UNIT_SPELLCAST_SUCCEEDED")
+
+listedDungeonHighlightEventFrame:SetScript("OnEvent", function(_, event, ...)
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        local unit = ...
+        if unit == "player" then
+            SuppressListedDungeonHighlightForSpell(ExtractSpellIDFromSpellcastEvent(...))
+        end
+        return
+    end
+
+    UpdateListedDungeonHighlightState()
+    SuppressListedDungeonHighlightForCurrentInstance()
+end)
+
+UpdateListedDungeonHighlightState()
+SuppressListedDungeonHighlightForCurrentInstance()
 
 local function InitDungeonTeleportsTabClassic()
     local config = GetDungeonTeleportsTabConfig()
@@ -1036,6 +1483,11 @@ local function InitDungeonTeleportsTabClassic()
     contentFrame.scrollChild = scrollChild
     contentFrame.buttons = {}
     contentFrame.cooldownRefreshPending = false
+    RegisterListedDungeonHighlightListener(function()
+        for _, btn in pairs(contentFrame.buttons) do
+            ApplyListedDungeonHighlight(btn)
+        end
+    end)
 
     local classicCombatBlocker
     if isClassicLayout then
@@ -1061,6 +1513,9 @@ local function InitDungeonTeleportsTabClassic()
         end
         if self.teleportLocation then
             GameTooltip:AddLine(self.teleportLocation, 0.7, 0.7, 0.7)
+        end
+        if self.isListedDungeonHighlightActive then
+            AddListedDungeonHighlightTooltipLine()
         end
 
         if not self.isKnown then
@@ -1175,7 +1630,8 @@ local function InitDungeonTeleportsTabClassic()
         local startY = -10
 
         local btnWidth = (availableWidth - (cols - 1) * marginX - 2 * startX) / cols
-        local btnHeight = 95
+        local btnHeight = TELEPORT_CARD_HEIGHT
+        local imageHeight = TELEPORT_CARD_IMAGE_HEIGHT
 
         for i, info in ipairs(resolvedData) do
             if not contentFrame.buttons[i] then
@@ -1196,22 +1652,23 @@ local function InitDungeonTeleportsTabClassic()
                     edgeSize = 1,
                 })
                 btn.border:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+                EnsureListedDungeonHighlight(btn)
 
                 -- Image Section
                 btn.imageContainer = btn:CreateTexture(nil, "BACKGROUND")
                 btn.imageContainer:SetPoint("TOPLEFT", 0, 0)
                 btn.imageContainer:SetPoint("TOPRIGHT", 0, 0)
-                btn.imageContainer:SetHeight(btnHeight * 0.6)
+                btn.imageContainer:SetHeight(imageHeight)
                 btn.imageContainer:SetColorTexture(0.05, 0.05, 0.05, 1)
 
                 btn.imageArea = btn:CreateTexture(nil, "ARTWORK")
                 btn.imageArea:SetPoint("CENTER", btn.imageContainer, "CENTER")
-                btn.imageArea:SetSize(btnHeight * 0.6, btnHeight * 0.6)
+                btn.imageArea:SetSize(imageHeight, imageHeight)
                 btn.imageArea:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
                 -- Info Section (Instance Name and Location)
                 btn.infoBg = btn:CreateTexture(nil, "ARTWORK")
-                btn.infoBg:SetPoint("TOPLEFT", 0, -(btnHeight * 0.6))
+                btn.infoBg:SetPoint("TOPLEFT", 0, -imageHeight)
                 btn.infoBg:SetPoint("BOTTOMRIGHT", 0, 0)
                 btn.infoBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
 
@@ -1263,8 +1720,8 @@ local function InitDungeonTeleportsTabClassic()
 
             -- Update Size
             btn:SetSize(btnWidth, btnHeight)
-            btn.imageContainer:SetHeight(btnHeight * 0.6)
-            btn.infoBg:SetPoint("TOPLEFT", 0, -(btnHeight * 0.6))
+            btn.imageContainer:SetHeight(imageHeight)
+            btn.infoBg:SetPoint("TOPLEFT", 0, -imageHeight)
 
             -- Grid Position
             local col = (i - 1) % cols
@@ -1280,6 +1737,7 @@ local function InitDungeonTeleportsTabClassic()
             btn.teleportName = info.name
             btn.teleportLocation = info.location
             btn.teleportSource = info.source
+            btn.teleportID = info.id
             local effectiveObtainable = info.obtainable
             if effectiveObtainable == nil then
                 effectiveObtainable = false
@@ -1332,6 +1790,7 @@ local function InitDungeonTeleportsTabClassic()
             -- Store current spell ID for tooltip
             btn.currentSpellID = spellToUse
             btn.isKnown = isKnown
+            ApplyListedDungeonHighlight(btn)
 
             -- Update Cooldown immediately
             if contentFrame:IsShown() then
@@ -1342,15 +1801,12 @@ local function InitDungeonTeleportsTabClassic()
 
             -- Set Texture using texture FileID
             if info.texture and info.texture > 0 then
-                btn.imageArea:ClearAllPoints()
-                btn.imageArea:SetAllPoints(btn.imageContainer)
-                btn.imageArea:SetTexture(info.texture)
-                btn.imageArea:SetTexCoord(0.08, 0.65, 0.14, 0.58)
+                ApplyTeleportImageTexture(btn, info, btnWidth, imageHeight)
             end
         end
 
         local totalRows = math.ceil(#resolvedData / cols)
-        local totalHeight = math.abs(startY) + (totalRows * (btnHeight + marginY))
+        local totalHeight = math.abs(startY) + (totalRows * btnHeight) + (math.max(totalRows - 1, 0) * marginY) + math.abs(startY)
         scrollChild:SetHeight(totalHeight)
         if mQoL_Styles and mQoL_Styles.CreateCustomScrollbar and scrollFrame.scrollbar and scrollFrame.scrollbar.UpdateScrollbar then
              scrollFrame.scrollbar.UpdateScrollbar()
@@ -2021,6 +2477,11 @@ local function InitDungeonTeleportsTabRetail()
     contentFrame.scrollChild = scrollChild
     contentFrame.buttons = {}
     contentFrame.cooldownRefreshPending = false
+    RegisterListedDungeonHighlightListener(function()
+        for _, btn in pairs(contentFrame.buttons) do
+            ApplyListedDungeonHighlight(btn)
+        end
+    end)
 
     if mQoL_Styles and mQoL_Styles.CreateCustomScrollbar then
         mQoL_Styles.CreateCustomScrollbar(scrollFrame, scrollChild)
@@ -2036,49 +2497,57 @@ local function InitDungeonTeleportsTabRetail()
         if self.teleportLocation then
             GameTooltip:AddLine(self.teleportLocation, 0.7, 0.7, 0.7)
         end
+        if self.isListedDungeonHighlightActive then
+            AddListedDungeonHighlightTooltipLine()
+        end
 
         if not self.isKnown then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("How to obtain:", 1, 0.82, 0)
-            local tooltipObtainable = ResolveObtainableState(self.teleportObtainable, self.teleportStarts, self.teleportEnds, self.teleportPostEnds)
-
-            if tooltipObtainable == false then
-                GameTooltip:AddLine("NOT CURRENTLY OBTAINABLE", 1, 0, 0)
-            elseif tooltipObtainable == "starts" then
-                local startTimestamp = GetSeasonStartTimestamp(self.teleportStarts)
-                if startTimestamp then
-                    local remaining = startTimestamp - GetServerTime()
-                    if remaining > 0 then
-                        GameTooltip:AddLine("Season starts in " .. FormatRemainingDuration(remaining), 1, 1, 0)
-                    else
-                        GameTooltip:AddLine("Season Started", 0, 1, 0)
-                    end
-                else
-                    GameTooltip:AddLine("Season start date unavailable", 1, 0.5, 0.25)
-                end
-            elseif tooltipObtainable == "ends" then
-                local text = "Season ends in"
-                local endTimestamp = self.teleportEnds and GetSeasonEndTimestampForDisplay(self.teleportEnds) or nil
-                local postEndTimestamp = self.teleportPostEnds and GetPostSeasonEndTimestamp(self.teleportPostEnds) or nil
-                local currentTime = GetServerTime()
-                local remaining = endTimestamp and (endTimestamp - currentTime) or nil
-                if remaining and remaining > 0 then
-                    text = text .. " " .. FormatRemainingDuration(remaining)
-                else
-                    local postRemaining = postEndTimestamp and (postEndTimestamp - currentTime) or nil
-                    if postRemaining and postRemaining > 0 then
-                        text = "Post-season ends in " .. FormatRemainingDuration(postRemaining)
-                    else
-                        text = "NOT CURRENTLY OBTAINABLE"
-                    end
-                end
-                GameTooltip:AddLine(text, 1, 0, 0)
-            end
-
-            if self.teleportSource then
-                GameTooltip:AddLine(self.teleportSource, 1, 1, 1, true)
+            if self.isAccountWideUnlocked then
+                GameTooltip:AddLine("Unlocked on your account", 0.2, 1, 0.2)
+                GameTooltip:AddLine(self.teleportUnavailableReason or "This character cannot use this portal yet.", 1, 0.82, 0, true)
             else
-                GameTooltip:AddLine("Complete Mythic Keystone on Level 10 or higher within the time limit.", 1, 1, 1, true)
+                GameTooltip:AddLine("How to obtain:", 1, 0.82, 0)
+                local tooltipObtainable = ResolveObtainableState(self.teleportObtainable, self.teleportStarts, self.teleportEnds, self.teleportPostEnds)
+
+                if tooltipObtainable == false then
+                    GameTooltip:AddLine("NOT CURRENTLY OBTAINABLE", 1, 0, 0)
+                elseif tooltipObtainable == "starts" then
+                    local startTimestamp = GetSeasonStartTimestamp(self.teleportStarts)
+                    if startTimestamp then
+                        local remaining = startTimestamp - GetServerTime()
+                        if remaining > 0 then
+                            GameTooltip:AddLine("Season starts in " .. FormatRemainingDuration(remaining), 1, 1, 0)
+                        else
+                            GameTooltip:AddLine("Season Started", 0, 1, 0)
+                        end
+                    else
+                        GameTooltip:AddLine("Season start date unavailable", 1, 0.5, 0.25)
+                    end
+                elseif tooltipObtainable == "ends" then
+                    local text = "Season ends in"
+                    local endTimestamp = self.teleportEnds and GetSeasonEndTimestampForDisplay(self.teleportEnds) or nil
+                    local postEndTimestamp = self.teleportPostEnds and GetPostSeasonEndTimestamp(self.teleportPostEnds) or nil
+                    local currentTime = GetServerTime()
+                    local remaining = endTimestamp and (endTimestamp - currentTime) or nil
+                    if remaining and remaining > 0 then
+                        text = text .. " " .. FormatRemainingDuration(remaining)
+                    else
+                        local postRemaining = postEndTimestamp and (postEndTimestamp - currentTime) or nil
+                        if postRemaining and postRemaining > 0 then
+                            text = "Post-season ends in " .. FormatRemainingDuration(postRemaining)
+                        else
+                            text = "NOT CURRENTLY OBTAINABLE"
+                        end
+                    end
+                    GameTooltip:AddLine(text, 1, 0, 0)
+                end
+
+                if self.teleportSource then
+                    GameTooltip:AddLine(self.teleportSource, 1, 1, 1, true)
+                else
+                    GameTooltip:AddLine("Complete Mythic Keystone on Level 10 or higher within the time limit.", 1, 1, 1, true)
+                end
             end
         end
 
@@ -2146,7 +2615,8 @@ local function InitDungeonTeleportsTabRetail()
         local startY = -10
 
         local btnWidth = (availableWidth - (cols - 1) * marginX - 2 * startX) / cols
-        local btnHeight = 95
+        local btnHeight = TELEPORT_CARD_HEIGHT
+        local imageHeight = TELEPORT_CARD_IMAGE_HEIGHT
 
         for i, info in ipairs(resolvedData) do
             if not contentFrame.buttons[i] then
@@ -2165,20 +2635,21 @@ local function InitDungeonTeleportsTabRetail()
                     edgeSize = 1,
                 })
                 btn.border:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+                EnsureListedDungeonHighlight(btn)
 
                 btn.imageContainer = btn:CreateTexture(nil, "BACKGROUND")
                 btn.imageContainer:SetPoint("TOPLEFT", 0, 0)
                 btn.imageContainer:SetPoint("TOPRIGHT", 0, 0)
-                btn.imageContainer:SetHeight(btnHeight * 0.6)
+                btn.imageContainer:SetHeight(imageHeight)
                 btn.imageContainer:SetColorTexture(0.05, 0.05, 0.05, 1)
 
                 btn.imageArea = btn:CreateTexture(nil, "ARTWORK")
                 btn.imageArea:SetPoint("CENTER", btn.imageContainer, "CENTER")
-                btn.imageArea:SetSize(btnHeight * 0.6, btnHeight * 0.6)
+                btn.imageArea:SetSize(imageHeight, imageHeight)
                 btn.imageArea:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
                 btn.infoBg = btn:CreateTexture(nil, "ARTWORK")
-                btn.infoBg:SetPoint("TOPLEFT", 0, -(btnHeight * 0.6))
+                btn.infoBg:SetPoint("TOPLEFT", 0, -imageHeight)
                 btn.infoBg:SetPoint("BOTTOMRIGHT", 0, 0)
                 btn.infoBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
 
@@ -2225,8 +2696,8 @@ local function InitDungeonTeleportsTabRetail()
             end
 
             btn:SetSize(btnWidth, btnHeight)
-            btn.imageContainer:SetHeight(btnHeight * 0.6)
-            btn.infoBg:SetPoint("TOPLEFT", 0, -(btnHeight * 0.6))
+            btn.imageContainer:SetHeight(imageHeight)
+            btn.infoBg:SetPoint("TOPLEFT", 0, -imageHeight)
 
             local col = (i - 1) % cols
             local row = math.floor((i - 1) / cols)
@@ -2241,6 +2712,7 @@ local function InitDungeonTeleportsTabRetail()
             btn.teleportName = info.name
             btn.teleportLocation = info.location
             btn.teleportSource = info.source
+            btn.teleportID = info.id
             local effectiveObtainable = info.obtainable
             if effectiveObtainable == nil then
                 effectiveObtainable = false
@@ -2250,8 +2722,11 @@ local function InitDungeonTeleportsTabRetail()
             btn.teleportStarts = info.starts
             btn.teleportEnds = info.ends
             btn.teleportPostEnds = info.postEnds
+            btn.isAccountWideUnlocked = false
+            btn.teleportUnavailableReason = nil
 
             local isKnown = false
+            local isAccountWideUnlocked = false
             local spellToUse = nil
             local faction = UnitFactionGroup("player")
 
@@ -2266,6 +2741,13 @@ local function InitDungeonTeleportsTabRetail()
             end
 
             isKnown = IsTeleportSpellKnown(spellToUse)
+            if not isKnown then
+                isAccountWideUnlocked = HasRetailTeleportUnlock(info)
+            end
+            btn.isAccountWideUnlocked = isAccountWideUnlocked
+            if isAccountWideUnlocked then
+                btn.teleportUnavailableReason = GetRetailTeleportUnavailableReason(info)
+            end
 
             if isKnown then
                 btn:Enable()
@@ -2287,6 +2769,7 @@ local function InitDungeonTeleportsTabRetail()
 
             btn.currentSpellID = spellToUse
             btn.isKnown = isKnown
+            ApplyListedDungeonHighlight(btn)
 
             if contentFrame:IsShown() then
                 RefreshButtonCooldown(btn)
@@ -2295,15 +2778,12 @@ local function InitDungeonTeleportsTabRetail()
             end
 
             if info.texture and info.texture > 0 then
-                btn.imageArea:ClearAllPoints()
-                btn.imageArea:SetAllPoints(btn.imageContainer)
-                btn.imageArea:SetTexture(info.texture)
-                btn.imageArea:SetTexCoord(0.08, 0.65, 0.14, 0.58)
+                ApplyTeleportImageTexture(btn, info, btnWidth, imageHeight)
             end
         end
 
         local totalRows = math.ceil(#resolvedData / cols)
-        local totalHeight = math.abs(startY) + (totalRows * (btnHeight + marginY))
+        local totalHeight = math.abs(startY) + (totalRows * btnHeight) + (math.max(totalRows - 1, 0) * marginY) + math.abs(startY)
         scrollChild:SetHeight(totalHeight)
         if mQoL_Styles and mQoL_Styles.CreateCustomScrollbar and scrollFrame.scrollbar and scrollFrame.scrollbar.UpdateScrollbar then
              scrollFrame.scrollbar.UpdateScrollbar()
@@ -2615,6 +3095,8 @@ local function TryInitialize(self)
     else
         InitDungeonTeleportsTabRetail()
     end
+    UpdateListedDungeonHighlightState()
+    SuppressListedDungeonHighlightForCurrentInstance()
     isInitialized = true
     self:UnregisterEvent("PLAYER_REGEN_ENABLED")
     self:UnregisterEvent("ADDON_LOADED")

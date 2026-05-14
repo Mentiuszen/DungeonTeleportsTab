@@ -1,10 +1,5 @@
-if _G.mQoL_Styles and _G.mQoL_Styles.CreateCustomScrollbar and _G.mQoL_Styles.CreateCustomDropdown then
-    return -- if styles loaded already from mQoL dont load again
-end
-
-local addonName = ...
-mQoL_Styles = _G.mQoL_Styles or {}
-_G.mQoL_Styles = mQoL_Styles
+local addonName, mQoL = ...
+mQoL_Styles = mQoL_Styles or {}
 
 local addonFolder = tostring(addonName or "DungeonTeleportsTab")
 local textureBasePath = "Interface\\AddOns\\" .. addonFolder .. "\\Media\\Textures\\"
