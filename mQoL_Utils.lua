@@ -1,3 +1,9 @@
+local Utils = DungeonTeleportsTab_Utils
+
+if mQoL or (Utils and Utils.IsAddOnActive("mQoL")) then
+    return -- Prevent loading if mQoL addon is already active
+end
+
 local addonName = ...
 
 mQoL_Utils = mQoL_Utils or {}
