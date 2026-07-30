@@ -405,7 +405,7 @@ end
 -- Teleport Data Structure
 local TeleportCategories = {
     { text = "Midnight Season 1", value = "MID_S1" },
-    --{ text = "Midnight Season 2", value = "MID_S2" },
+    { text = "Midnight Season 2", value = "MID_S2" },
     { separator = true },
     { text = "Midnight", value = "Midnight" },
     { text = "The War Within", value = "The War Within" },
@@ -421,18 +421,18 @@ local TeleportCategories = {
 
 local TeleportData = {
     ["MID_S1"] = {
-        obtainable = "starts",
+        obtainable = "ends",
         starts = 20260325,
-        --ends = 20260723, most likely July 2026 (date is speculative)
-        --postEnds = 20260806, most likely August 2026 (date is speculative)
+        ends = 20260812,
+        postEnds = 20260819,
         ids = { 658, 1209, 1753, 2526, 2805, 2811, 2874, 2915, },
     },
     ["MID_S2"] = {
-        obtainable = false,
-        --starts = 20260806, (date is speculative)
+        obtainable = "starts",
+        starts = 20260819,
         --ends = UNKNOWN,
         --postEnds = UNKNOWN,
-        ids = { 2813, 2825, 2859, 2923, },
+        ids = { 2813, 2825, 2859, 2923, 2993, 2521, 1762, 1877, },
     },
 
     ["Midnight"] = {
@@ -440,10 +440,11 @@ local TeleportData = {
         { id = 2811, name = "Magisters' Terrace", texture = 7467176, artOffsetY = 0.20, spellID = 1254572, achievementID = 61267, requiredLevel = 90, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
         { id = 2874, name = "Maisara Caverns", texture = 7478532, artOffsetY = -0.20, spellID = 1254559, achievementID = 61269, requiredLevel = 90, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
         { id = 2915, name = "Nexus-Point Xenas", texture = 7570499, artOffsetY = -0.10, spellID = 1254563, achievementID = 61268, requiredLevel = 90, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
-        { id = 2813, name = "Murder Row", texture = 7467177, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        { id = 2825, name = "Den of Nalorakk", texture = 7478533, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        { id = 2859, name = "The Blinding Vale", texture = 7478531, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Harandar", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
-        { id = 2923, name = "Voidscar Arena", texture = 7479111, spellID = 0, achievementID = 0, requiredLevel = 90, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." }, --Not Added Yet
+        { id = 2813, name = "Murder Row", texture = 7467177, artOffsetY = 0.00, spellID = 1286809, achievementID = 62440, requiredLevel = 90, location = "Eversong Woods", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2825, name = "Den of Nalorakk", texture = 7478533, artOffsetY = 0.00, spellID = 1286807, achievementID = 62439, requiredLevel = 90, location = "Zul'Aman", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2859, name = "The Blinding Vale", texture = 7478531, artOffsetY = 0.00, spellID = 1286801, achievementID = 62437, requiredLevel = 90, location = "Harandar", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2923, name = "Voidscar Arena", texture = 7479111, artOffsetY = 0.00, spellID = 1286804, achievementID = 62438, requiredLevel = 90, location = "Voidstorm", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 2993, name = "Altar of Fangs", texture = 7956178, artOffsetY = 0.00, spellID = 1286812, achivementID = 62441, requiredLevel = 90, location = "The Coiled Isle", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
         --{ id = 2912, name = "The Voidspire", texture = 7507134, spellID = 0, achievementID = 0, location = "	Voidstorm", source = "Unknown" }, --Unconfirmed
         --{ id = 2939, name = "The Dreamrift", texture = 7570500, spellID = 0, achievementID = 0, location = "Harandar", source = "Unknown" }, --Unconfirmed
         --{ id = 2913, name = "March on Quel'Danas", texture = 7480125, spellID = 0, achievementID = 0, location = "Eversong Woods", source = "Unknown" }, --Unconfirmed
@@ -498,6 +499,8 @@ local TeleportData = {
         { id = 1841, name = "The Underrot", texture = 2177729, artOffsetY = 0.10, spellID = 410074, achievementID = 17849, requiredLevel = 80, location = "Nazmir", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
         { id = 1862, name = "Waycrest Manor", texture = 2177732, artOffsetY = 0.0, spellID = 424167, achievementID = 19086, requiredLevel = 80, location = "Drustvar", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
         { id = 2097, name = "Operation: Mechagon", texture = 3025327, artOffsetY = 0.20, spellID = 373274, achievementIDs = { 15693, 40966 }, requiredLevel = 80, location = "Mechagon Island", source = "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1762, name = "Kings' Rest", texture = 2177723, artOffsetY = 0.0, spellID = 1286831, achievementID = 62444, requiredLevel = 90, location = "Zuldazar", source= "Complete Mythic Keystone on Level 10 or higher within the time limit." },
+        { id = 1877, name = "Temple of Sethraliss", texture = 2177727, artOffsetY = 0.0, spellID = 1286828, achievementID = 62443, requiredLevel = 90, location = "Zuldazar", source= "Complete Mythic Keystone on Level 10 or higher within the time limit." },
     },
     ["Legion"] = {
         { id = 1501, name = "Black Rook Hold", texture = 1411847, artOffsetY = -0.10, spellID = 424153, achievementID = 19084, requiredLevel = 80, location = "Val'sharah", source = "Complete Mythic Keystone on Level 20 or higher within the time limit." },
@@ -851,6 +854,8 @@ local listedDungeonHighlightState = {
     activeSpellIDs = nil,
     activeInfo = nil,
     groupGUID = nil,
+    pendingJoinedGroupInfo = nil,
+    pendingJoinedGroupInfoExpires = nil,
     joinedGroupInfo = nil,
     joinedGroupInfoExpires = nil,
     suppressedSignature = nil,
@@ -1363,30 +1368,63 @@ local function GetSearchResultListedDungeonInfo(searchResultID)
         return nil
     end
 
-    if C_LFGList.HasSearchResultInfo then
-        local okHasInfo, hasInfo = pcall(C_LFGList.HasSearchResultInfo, searchResultID)
-        if okHasInfo and not hasInfo then
-            return nil
-        end
-    end
-
     local okResult, searchResultInfo = pcall(C_LFGList.GetSearchResultInfo, searchResultID)
     if not okResult or type(searchResultInfo) ~= "table" then
         return nil
     end
 
-    return BuildListedDungeonInfoFromActivityIDs(
+    local info = BuildListedDungeonInfoFromActivityIDs(
         searchResultInfo.activityIDs or searchResultInfo.activityID,
         searchResultInfo.questID,
         searchResultInfo.partyGUID
     )
+    if info then
+        info.searchResultID = searchResultID
+    end
+
+    return info
+end
+
+local function ClearPendingJoinedListedDungeonInfo(searchResultID)
+    local state = listedDungeonHighlightState
+    local pendingInfo = state.pendingJoinedGroupInfo
+    searchResultID = tonumber(searchResultID) or 0
+
+    if type(pendingInfo) ~= "table" or pendingInfo.searchResultID ~= searchResultID then
+        return false
+    end
+
+    state.pendingJoinedGroupInfo = nil
+    state.pendingJoinedGroupInfoExpires = nil
+    return true
+end
+
+local function CapturePendingJoinedListedDungeonInfo(searchResultID)
+    local info = GetSearchResultListedDungeonInfo(searchResultID)
+    if not info then
+        return false
+    end
+
+    listedDungeonHighlightState.pendingJoinedGroupInfo = info
+    listedDungeonHighlightState.pendingJoinedGroupInfoExpires = (GetTime and GetTime() or 0) + 180
+    return true
 end
 
 local function CaptureJoinedListedDungeonInfo(searchResultID)
     local info = GetSearchResultListedDungeonInfo(searchResultID)
+    local state = listedDungeonHighlightState
+    searchResultID = tonumber(searchResultID) or 0
+
+    if not info
+        and type(state.pendingJoinedGroupInfo) == "table"
+        and state.pendingJoinedGroupInfo.searchResultID == searchResultID then
+        info = state.pendingJoinedGroupInfo
+    end
+
     if info then
-        listedDungeonHighlightState.joinedGroupInfo = info
-        listedDungeonHighlightState.joinedGroupInfoExpires = (GetTime and GetTime() or 0) + 180
+        state.joinedGroupInfo = info
+        state.joinedGroupInfoExpires = (GetTime and GetTime() or 0) + 180
+        ClearPendingJoinedListedDungeonInfo(searchResultID)
         return true
     end
 
@@ -1411,6 +1449,7 @@ local function ResetListedDungeonHighlightState(keepSuppressedSignature, keepJoi
     local hadState = listedDungeonHighlightState.activeSignature ~= nil
         or listedDungeonHighlightState.activeInfo ~= nil
         or listedDungeonHighlightState.groupGUID ~= nil
+        or (not keepJoinedGroupInfo and listedDungeonHighlightState.pendingJoinedGroupInfo ~= nil)
         or (not keepJoinedGroupInfo and listedDungeonHighlightState.joinedGroupInfo ~= nil)
         or (not keepSuppressedSignature and listedDungeonHighlightState.suppressedSignature ~= nil)
 
@@ -1420,6 +1459,8 @@ local function ResetListedDungeonHighlightState(keepSuppressedSignature, keepJoi
     listedDungeonHighlightState.activeInfo = nil
     listedDungeonHighlightState.groupGUID = nil
     if not keepJoinedGroupInfo then
+        listedDungeonHighlightState.pendingJoinedGroupInfo = nil
+        listedDungeonHighlightState.pendingJoinedGroupInfoExpires = nil
         listedDungeonHighlightState.joinedGroupInfo = nil
         listedDungeonHighlightState.joinedGroupInfoExpires = nil
     end
@@ -1487,6 +1528,11 @@ local function UpdateListedDungeonHighlightState()
     local isInGroup = IsPlayerInAnyGroup()
     local changed = false
     local now = GetTime and GetTime() or 0
+
+    if state.pendingJoinedGroupInfoExpires and now > state.pendingJoinedGroupInfoExpires then
+        state.pendingJoinedGroupInfo = nil
+        state.pendingJoinedGroupInfoExpires = nil
+    end
 
     if state.joinedGroupInfoExpires and now > state.joinedGroupInfoExpires then
         state.joinedGroupInfo = nil
@@ -1626,11 +1672,12 @@ listedDungeonHighlightEventFrame:SetScript("OnEvent", function(_, event, ...)
         CaptureJoinedListedDungeonInfo(...)
     elseif event == "LFG_LIST_APPLICATION_STATUS_UPDATED" then
         local searchResultID, newStatus = ...
-        if joinedApplicationStatuses[newStatus] then
+        if newStatus == "invited" then
+            CapturePendingJoinedListedDungeonInfo(searchResultID)
+        elseif joinedApplicationStatuses[newStatus] then
             CaptureJoinedListedDungeonInfo(searchResultID)
         elseif inactiveApplicationStatuses[newStatus] then
-            listedDungeonHighlightState.joinedGroupInfo = nil
-            listedDungeonHighlightState.joinedGroupInfoExpires = nil
+            ClearPendingJoinedListedDungeonInfo(searchResultID)
         end
     end
 
