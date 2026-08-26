@@ -1,8 +1,8 @@
-## Interface: 120007, 120100
+## Interface: 120100
 ## Title: Dungeon Teleports Tab
 ## Notes: Dungeon Teleports Tab for Retail
 ## Author: Mentiuszen
-## Version: 1.9.0
+## Version: 1.9.1
 ## OptionalDeps: mQoL
 ## SavedVariables: DungeonTeleportsTab_DB
 
