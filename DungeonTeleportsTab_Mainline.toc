@@ -1,10 +1,11 @@
-## Interface: 120100
+## Interface: 120105, 120107
 ## Title: Dungeon Teleports Tab
 ## Notes: Dungeon Teleports Tab for Retail
 ## Author: Mentiuszen
-## Version: 1.9.1
+## Version: 1.10.0
 ## OptionalDeps: mQoL
 ## SavedVariables: DungeonTeleportsTab_DB
+## IconTexture: Interface\AddOns\DungeonTeleportsTab\media\textures\DTTlogo
 
 DungeonTeleportsTab_Utils.lua
 mQoL_Utils.lua

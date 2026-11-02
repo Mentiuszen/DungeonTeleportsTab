@@ -1,7 +1,7 @@
 local Utils = DungeonTeleportsTab_Utils
 
 if mQoL or (Utils and Utils.IsAddOnActive("mQoL")) then
-    return -- Prevent loading if mQoL addon is already active
+    return -- Prevent replacing the helper already owned by mQoL.
 end
 
 local addonName = ...
@@ -63,7 +63,10 @@ function mQoL_Utils.GetUnitFullName(unit)
         return nil
     end
 
-    return mQoL_Utils.NormalizeFullName(GetUnitName(unit, true))
+    if type(GetUnitName)=='function' then return mQoL_Utils.NormalizeFullName(GetUnitName(unit, true)) end
+    local name,realm=UnitName(unit)
+    if not name then return nil end
+    return mQoL_Utils.NormalizeFullName(name..'-'..(realm or GetRealmName()))
 end
 
 function mQoL_Utils.GetShortName(name)
@@ -311,15 +314,15 @@ function mQoL_Utils.GetClassColorRGB(classFile, fallbackR, fallbackG, fallbackB)
 end
 
 function mQoL_Utils.GetCommDistribution()
-    if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+    if type(IsInGroup)=='function' and LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
         return "INSTANCE_CHAT"
     end
 
-    if IsInRaid() then
+    if type(IsInRaid) == "function" and IsInRaid() then
         return "RAID"
     end
 
-    if IsInGroup() then
+    if type(IsInGroup) == "function" and IsInGroup() then
         return "PARTY"
     end
 
