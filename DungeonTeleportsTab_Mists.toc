@@ -5,6 +5,7 @@
 ## Version: 1.10.1
 ## OptionalDeps: mQoL
 ## SavedVariables: DungeonTeleportsTab_DB
+## IconTexture: Interface\AddOns\DungeonTeleportsTab\media\textures\DTTlogo
 
 DungeonTeleportsTab_Utils.lua
 mQoL_Utils.lua
